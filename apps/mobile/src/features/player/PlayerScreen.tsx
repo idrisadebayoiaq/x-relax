@@ -212,12 +212,15 @@ export function PlayerScreen({ navigation }: Props) {
       return;
     }
     setRatingBusy(true);
-    const { error: ratingError } = await supabase.from('ratings').upsert({
-      user_id: user.id,
-      sound_id: current.id,
-      score: myScore,
-      updated_at: new Date().toISOString(),
-    });
+    const { error: ratingError } = await supabase.from('ratings').upsert(
+      {
+        user_id: user.id,
+        sound_id: current.id,
+        score: myScore,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'user_id,sound_id' },
+    );
     if (ratingError) {
       setRatingBusy(false);
       Alert.alert('Rating failed', ratingError.message);

@@ -1,5 +1,5 @@
 export function formatDuration(seconds: number): string {
-  if (!Number.isFinite(seconds) || seconds <= 0) return '—';
+  if (!Number.isFinite(seconds) || seconds <= 0) return '';
   const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds % 60);
   return `${m}:${s.toString().padStart(2, '0')}`;
@@ -18,7 +18,7 @@ export function formatRatingSummary(
   count: number | null | undefined,
 ): string {
   const n = Number(count ?? 0);
-  if (!n) return '★ —';
+  if (!n) return 'No ratings';
   const avg = Number(average ?? 0);
   return `★ ${avg.toFixed(1)} (${n})`;
 }

@@ -105,12 +105,15 @@ export function SoundRatingPanel({
     if (myScore < 1) return alert('Choose a star rating first.');
     setBusy(true);
     const supabase = createClient();
-    const { error: ratingError } = await supabase.from('ratings').upsert({
-      user_id: user.id,
-      sound_id: sound.id,
-      score: myScore,
-      updated_at: new Date().toISOString(),
-    });
+    const { error: ratingError } = await supabase.from('ratings').upsert(
+      {
+        user_id: user.id,
+        sound_id: sound.id,
+        score: myScore,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'user_id,sound_id' },
+    );
     if (ratingError) {
       setBusy(false);
       return alert(ratingError.message);

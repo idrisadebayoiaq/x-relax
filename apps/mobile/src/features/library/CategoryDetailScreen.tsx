@@ -33,18 +33,24 @@ export function CategoryDetailScreen() {
 
   const load = useCallback(async () => {
     const categoryId = route.params.categoryId;
-    const [{ data: cat }, { data: items }] = await Promise.all([
+    const [{ data: cat }, { data: linkRows }] = await Promise.all([
       supabase.from('categories').select('name').eq('id', categoryId).maybeSingle(),
-      supabase
-        .from('sound_categories')
-        .select('sound:sounds(*)')
-        .eq('category_id', categoryId),
+      supabase.from('sound_categories').select('sound_id').eq('category_id', categoryId),
     ]);
     setTitle(cat?.name ?? route.params.name ?? 'Category');
-    const list = ((items as { sound: Sound | Sound[] | null }[]) ?? [])
-      .map((i) => (Array.isArray(i.sound) ? i.sound[0] : i.sound))
-      .filter((s): s is Sound => !!s && s.status === 'published');
-    setSounds(list);
+    const ids = [...new Set((linkRows ?? []).map((r) => r.sound_id as string).filter(Boolean))];
+    if (!ids.length) {
+      setSounds([]);
+      setLoading(false);
+      return;
+    }
+    const { data: soundRows } = await supabase
+      .from('sounds')
+      .select('*')
+      .in('id', ids)
+      .eq('status', 'published')
+      .order('play_count', { ascending: false });
+    setSounds((soundRows as Sound[]) ?? []);
     setLoading(false);
   }, [route.params.categoryId, route.params.name]);
 

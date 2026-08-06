@@ -20,6 +20,8 @@ import { useAppTheme } from '../../lib/useAppTheme';
 import { supabase } from '../../lib/supabase';
 import { formatDuration, moodPaletteFor } from '../../lib/format';
 import { getDailyPlayStatus } from '../../lib/dailyListenLimit';
+import { buildPersonalizedRecommended, categoriesWithSounds } from '../../lib/recommendations';
+import { buildCategoryRails, CATEGORY_ICONS } from '../../lib/categoryRails';
 import { useAuth } from '../auth/AuthProvider';
 import { usePlayer } from '../player/PlayerProvider';
 import { WelcomeBanner } from './WelcomeBanner';
@@ -44,19 +46,27 @@ type CategoryRow = {
   slug: string;
   cover_url?: string | null;
   created_by?: string | null;
+  sort_order?: number | null;
 };
 
 const CATALOG_SLUGS = new Set([
+  'asmr',
   'bell',
   'birds',
+  'children',
   'fireplace',
+  'focus',
   'forest',
   'healing',
   'meditation',
   'mixes',
+  'nature',
   'ocean',
   'rain',
+  'reading',
+  'relaxation',
   'rivers',
+  'sleep',
   'thunder',
   'wind',
 ]);
@@ -95,6 +105,7 @@ export function HomeScreen() {
         { data: published, error: soundsErr },
         { data: cats },
         { data: history },
+        { data: preferenceHistory },
         { data: dailySetting },
         { data: recommendedSetting },
         { data: categoryLinks },
@@ -107,7 +118,7 @@ export function HomeScreen() {
             .order('created_at', { ascending: false }),
           supabase
             .from('categories')
-            .select('id, name, slug, cover_url, created_by')
+            .select('id, name, slug, cover_url, created_by, sort_order')
             .is('parent_id', null)
             .order('sort_order'),
           user
@@ -117,6 +128,14 @@ export function HomeScreen() {
                 .eq('user_id', user.id)
                 .order('played_at', { ascending: false })
                 .limit(12)
+            : Promise.resolve({ data: [] as any[] }),
+          user
+            ? supabase
+                .from('listening_history')
+                .select('sound_id')
+                .eq('user_id', user.id)
+                .order('played_at', { ascending: false })
+                .limit(80)
             : Promise.resolve({ data: [] as any[] }),
           supabase
             .from('app_settings')
@@ -152,26 +171,30 @@ export function HomeScreen() {
         .map((h) => h.sound as Sound);
       const trending = [...all].sort((a, b) => b.play_count - a.play_count).slice(0, 12);
       const featured = all.filter((s) => s.is_featured);
-      const fromIds = recommendedIds
-        .map((id) => all.find((s) => s.id === id))
-        .filter(Boolean) as Sound[];
-      const recommended =
-        fromIds.length > 0
-          ? fromIds
-          : trending.slice(0, 12);
+      const links = (categoryLinks as { sound_id: string; category_id: string }[]) ?? [];
+      const recentHistorySoundIds = [
+        ...new Set(((preferenceHistory as { sound_id: string }[]) ?? []).map((h) => h.sound_id).filter(Boolean)),
+      ];
+      const recommended = buildPersonalizedRecommended({
+        all,
+        categoryLinks: links,
+        recentHistorySoundIds,
+        adminRecommendedIds: recommendedIds,
+        limit: 12,
+      });
 
       const catRows = (cats as CategoryRow[]) ?? [];
-      const slugByCatId = new Map(catRows.map((c) => [c.id, c.slug]));
-      const bySlug = new Map<string, Sound[]>();
-      for (const row of (categoryLinks as { sound_id: string; category_id: string }[]) ?? []) {
-        const slug = slugByCatId.get(row.category_id);
-        if (slug !== 'bell' && slug !== 'healing') continue;
-        const sound = all.find((s) => s.id === row.sound_id);
-        if (!sound) continue;
-        const list = bySlug.get(slug) ?? [];
-        list.push(sound);
-        bySlug.set(slug, list);
-      }
+      const publishedIds = new Set(all.map((s) => s.id));
+      const withSounds = categoriesWithSounds(catRows, links, publishedIds);
+      const browseCats = withSounds.filter(
+        (c) => CATALOG_SLUGS.has(c.slug) || Boolean(c.cover_url) || Boolean(c.created_by),
+      );
+      const categoryRails = buildCategoryRails({
+        categories: browseCats,
+        categoryLinks: links,
+        sounds: all,
+        limitPerCategory: 12,
+      });
 
       const dailySound =
         (dailyPickId ? all.find((s) => s.id === dailyPickId) : undefined) ??
@@ -181,10 +204,6 @@ export function HomeScreen() {
         null;
 
       setDaily(dailySound);
-
-      const browseCats = catRows.filter(
-        (c) => CATALOG_SLUGS.has(c.slug) || Boolean(c.cover_url) || Boolean(c.created_by),
-      );
 
       const next = (
         [
@@ -203,23 +222,11 @@ export function HomeScreen() {
             icon: 'star-outline',
           },
           {
-            key: 'bell',
-            title: 'Bell',
-            subtitle: 'Temple bells and chimes for focus and wind-down',
-            data: (bySlug.get('bell') ?? []).slice(0, 12),
-            icon: 'notifications-outline',
-          },
-          {
-            key: 'healing',
-            title: 'Healing',
-            subtitle: 'Singing bowls and sound baths for deep rest',
-            data: (bySlug.get('healing') ?? []).slice(0, 12),
-            icon: 'leaf-outline',
-          },
-          {
             key: 'recommended',
             title: 'Recommended',
-            subtitle: 'One pick from each mood',
+            subtitle: recentHistorySoundIds.length
+              ? 'Based on what you listen to most'
+              : 'Picks to start your calm library',
             data: recommended,
             icon: 'sparkles-outline',
           },
@@ -229,6 +236,11 @@ export function HomeScreen() {
             data: trending,
             icon: 'trending-up-outline',
           },
+          ...categoryRails.map((rail) => ({
+            ...rail,
+            icon: (CATEGORY_ICONS[rail.key.replace(/^cat-/, '')] ??
+              'musical-notes-outline') as keyof typeof Ionicons.glyphMap,
+          })),
         ] as Section[]
       ).filter((s) => s.data.length > 0);
 
@@ -282,7 +294,7 @@ export function HomeScreen() {
     const started = await playSound(sound, {
       queue: playableQueue,
       queueIndex: index >= 0 ? index : 0,
-      queueLabel: queueLabel ?? (queue ? undefined : 'Catalog'),
+      queueLabel: queueLabel ?? (queue ? undefined : 'All sounds'),
     });
     if (!started) return;
     if (!hasUnlimitedListening) {
@@ -479,10 +491,14 @@ export function HomeScreen() {
           <View style={styles.sectionHead}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <Icon name="grid-outline" size={18} color={colors.textMuted} />
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Browse moods</Text>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Categories</Text>
             </View>
             <Text style={[styles.sectionSub, { color: colors.textMuted }]}>
-              {catalogCount ? `${catalogCount} sounds ready` : 'Find your frequency'}
+              {categories.length
+                ? `${categories.length} categories · tap to open`
+                : catalogCount
+                  ? `${catalogCount} sounds ready`
+                  : 'Find your frequency'}
             </Text>
           </View>
           <ScrollView

@@ -345,7 +345,7 @@ export function LibraryScreen() {
                     Downloads need Premium
                   </Text>
                   <Text style={{ color: colors.textMuted, fontFamily: 'DMSans_400Regular', fontSize: 13, lineHeight: 19 }}>
-                    Upgrade to save sounds for offline listening — Premium or admin only.
+                    Upgrade to save sounds for offline listening · Premium or admin only.
                   </Text>
                 </Pressable>
               ) : null}

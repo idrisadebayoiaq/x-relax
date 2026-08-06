@@ -13,7 +13,7 @@ export function SoundCard({
 }) {
   const rating = formatRatingSummary(sound.average_rating, sound.rating_count);
   const meta = [formatDuration(sound.duration_seconds), formatPlayCount(sound.play_count), rating]
-    .filter(Boolean)
+    .filter((part) => part && part !== '—')
     .join(' · ');
 
   const tip = sound.description?.trim();

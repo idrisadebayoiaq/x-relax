@@ -58,7 +58,7 @@ export function PremiumScreen() {
       title="Premium"
       subtitle={
         isPremium
-          ? `You’re on ${profile?.premium_status ?? 'Premium'} — unlimited calm.`
+          ? `You’re on ${profile?.premium_status ?? 'Premium'} · unlimited calm.`
           : 'Unlock unlimited listening, sleep timer, downloads, and more.'
       }
     >

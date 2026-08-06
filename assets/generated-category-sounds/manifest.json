@@ -1,0 +1,182 @@
+[
+  {
+    "id": "cd7d416d-fb59-415e-b802-6d59bb1ca27a",
+    "cat": "nature",
+    "title": "Pine Breeze Field",
+    "tip": "Listen for 20 to 40 minutes to calm an overactive mind with soft open air.",
+    "audio_path": "generated/cd7d416d-fb59-415e-b802-6d59bb1ca27a.mp3",
+    "audio_url": "https://bfilhkxyjiofkfqwqyep.supabase.co/storage/v1/object/public/sounds/generated/cd7d416d-fb59-415e-b802-6d59bb1ca27a.mp3",
+    "duration_seconds": 32
+  },
+  {
+    "id": "c1a1839b-5b7a-4ee1-904b-ca8375002c70",
+    "cat": "nature",
+    "title": "Creek Stone Hush",
+    "tip": "Listen for 30 to 45 minutes when anxious. Soft water motion helps attention rest.",
+    "audio_path": "generated/c1a1839b-5b7a-4ee1-904b-ca8375002c70.mp3",
+    "audio_url": "https://bfilhkxyjiofkfqwqyep.supabase.co/storage/v1/object/public/sounds/generated/c1a1839b-5b7a-4ee1-904b-ca8375002c70.mp3",
+    "duration_seconds": 34
+  },
+  {
+    "id": "efe64ba9-d907-4ab7-89d5-8c61962fee63",
+    "cat": "nature",
+    "title": "Canopy Soft Drift",
+    "tip": "Play for 25 to 40 minutes for gentle forest focus and soft recovery.",
+    "audio_path": "generated/efe64ba9-d907-4ab7-89d5-8c61962fee63.mp3",
+    "audio_url": "https://bfilhkxyjiofkfqwqyep.supabase.co/storage/v1/object/public/sounds/generated/efe64ba9-d907-4ab7-89d5-8c61962fee63.mp3",
+    "duration_seconds": 33
+  },
+  {
+    "id": "e4a21a7b-f719-4746-b416-58696f6785ef",
+    "cat": "nature",
+    "title": "Meadow Air Glow",
+    "tip": "Listen for 15 to 30 minutes in the morning to lift mood softly.",
+    "audio_path": "generated/e4a21a7b-f719-4746-b416-58696f6785ef.mp3",
+    "audio_url": "https://bfilhkxyjiofkfqwqyep.supabase.co/storage/v1/object/public/sounds/generated/e4a21a7b-f719-4746-b416-58696f6785ef.mp3",
+    "duration_seconds": 31
+  },
+  {
+    "id": "f7b5072b-eb7a-4672-a2f8-2e3fceb5e045",
+    "cat": "nature",
+    "title": "Dusk Woods Whisper",
+    "tip": "Use for 40 to 60 minutes to lower stress with quiet woodland texture.",
+    "audio_path": "generated/f7b5072b-eb7a-4672-a2f8-2e3fceb5e045.mp3",
+    "audio_url": "https://bfilhkxyjiofkfqwqyep.supabase.co/storage/v1/object/public/sounds/generated/f7b5072b-eb7a-4672-a2f8-2e3fceb5e045.mp3",
+    "duration_seconds": 35
+  },
+  {
+    "id": "c36da914-5259-4966-9383-f4237260d8ba",
+    "cat": "asmr",
+    "title": "Soft Texture Crackle",
+    "tip": "Use for 20 to 40 minutes for close textured calm and soft attention.",
+    "audio_path": "generated/c36da914-5259-4966-9383-f4237260d8ba.mp3",
+    "audio_url": "https://bfilhkxyjiofkfqwqyep.supabase.co/storage/v1/object/public/sounds/generated/c36da914-5259-4966-9383-f4237260d8ba.mp3",
+    "duration_seconds": 30
+  },
+  {
+    "id": "7c7d16f5-20a2-49d1-93fc-b3ae220c2c70",
+    "cat": "asmr",
+    "title": "Velvet Soft Hiss",
+    "tip": "Listen for 25 to 40 minutes for intimate soft noise and gentle nerves.",
+    "audio_path": "generated/7c7d16f5-20a2-49d1-93fc-b3ae220c2c70.mp3",
+    "audio_url": "https://bfilhkxyjiofkfqwqyep.supabase.co/storage/v1/object/public/sounds/generated/7c7d16f5-20a2-49d1-93fc-b3ae220c2c70.mp3",
+    "duration_seconds": 32
+  },
+  {
+    "id": "055948ff-9cbd-4bf1-9091-8783d8437ae9",
+    "cat": "asmr",
+    "title": "Glass Soft Tone",
+    "tip": "Play for 15 to 30 minutes during light anxiety for a soft focal point.",
+    "audio_path": "generated/055948ff-9cbd-4bf1-9091-8783d8437ae9.mp3",
+    "audio_url": "https://bfilhkxyjiofkfqwqyep.supabase.co/storage/v1/object/public/sounds/generated/055948ff-9cbd-4bf1-9091-8783d8437ae9.mp3",
+    "duration_seconds": 30
+  },
+  {
+    "id": "2f5f2a2f-632d-41c3-9469-b3237fd297a8",
+    "cat": "asmr",
+    "title": "Page Brush Soft",
+    "tip": "Use for 20 to 35 minutes for close page like texture and calm focus.",
+    "audio_path": "generated/2f5f2a2f-632d-41c3-9469-b3237fd297a8.mp3",
+    "audio_url": "https://bfilhkxyjiofkfqwqyep.supabase.co/storage/v1/object/public/sounds/generated/2f5f2a2f-632d-41c3-9469-b3237fd297a8.mp3",
+    "duration_seconds": 33
+  },
+  {
+    "id": "33306949-d649-4444-bff4-88a040d7a674",
+    "cat": "asmr",
+    "title": "Ember Tick Soft",
+    "tip": "Play for 30 to 50 minutes for intimate evening texture and rest.",
+    "audio_path": "generated/33306949-d649-4444-bff4-88a040d7a674.mp3",
+    "audio_url": "https://bfilhkxyjiofkfqwqyep.supabase.co/storage/v1/object/public/sounds/generated/33306949-d649-4444-bff4-88a040d7a674.mp3",
+    "duration_seconds": 34
+  },
+  {
+    "id": "d10c695a-41e9-4c1e-9ae4-12d0da99705d",
+    "cat": "children",
+    "title": "Soft Lull Chime",
+    "tip": "Listen for 10 to 20 minutes after waking for a gentle start.",
+    "audio_path": "generated/d10c695a-41e9-4c1e-9ae4-12d0da99705d.mp3",
+    "audio_url": "https://bfilhkxyjiofkfqwqyep.supabase.co/storage/v1/object/public/sounds/generated/d10c695a-41e9-4c1e-9ae4-12d0da99705d.mp3",
+    "duration_seconds": 28
+  },
+  {
+    "id": "e122aafa-c4c4-49fb-9e37-19878720a6b3",
+    "cat": "children",
+    "title": "Cloud Soft Hum",
+    "tip": "Play for 20 to 35 minutes for soft open air calm for little listeners.",
+    "audio_path": "generated/e122aafa-c4c4-49fb-9e37-19878720a6b3.mp3",
+    "audio_url": "https://bfilhkxyjiofkfqwqyep.supabase.co/storage/v1/object/public/sounds/generated/e122aafa-c4c4-49fb-9e37-19878720a6b3.mp3",
+    "duration_seconds": 32
+  },
+  {
+    "id": "acfe62e0-598c-405f-9237-09ca17a2648b",
+    "cat": "children",
+    "title": "Tiny Rain Patter",
+    "tip": "Listen for 30 to 45 minutes for soft sleep wind down.",
+    "audio_path": "generated/acfe62e0-598c-405f-9237-09ca17a2648b.mp3",
+    "audio_url": "https://bfilhkxyjiofkfqwqyep.supabase.co/storage/v1/object/public/sounds/generated/acfe62e0-598c-405f-9237-09ca17a2648b.mp3",
+    "duration_seconds": 33
+  },
+  {
+    "id": "e6c51eed-5039-451c-92a6-3ff3d406b97e",
+    "cat": "children",
+    "title": "Bird Soft Sparkle",
+    "tip": "Listen for 15 to 25 minutes to lift mood softly without stress.",
+    "audio_path": "generated/e6c51eed-5039-451c-92a6-3ff3d406b97e.mp3",
+    "audio_url": "https://bfilhkxyjiofkfqwqyep.supabase.co/storage/v1/object/public/sounds/generated/e6c51eed-5039-451c-92a6-3ff3d406b97e.mp3",
+    "duration_seconds": 28
+  },
+  {
+    "id": "b14cb552-85ab-4d79-b427-49a982476b37",
+    "cat": "children",
+    "title": "Warm Nest Glow",
+    "tip": "Use for 25 to 40 minutes for cozy evening calm.",
+    "audio_path": "generated/b14cb552-85ab-4d79-b427-49a982476b37.mp3",
+    "audio_url": "https://bfilhkxyjiofkfqwqyep.supabase.co/storage/v1/object/public/sounds/generated/b14cb552-85ab-4d79-b427-49a982476b37.mp3",
+    "duration_seconds": 31
+  },
+  {
+    "id": "ecbd2ece-39fe-452b-ab16-7ecb96d9c339",
+    "cat": "mixes",
+    "title": "Rain Wind Soft Blend",
+    "tip": "Use for 45 to 60 minutes for layered rain and air wind down.",
+    "audio_path": "generated/ecbd2ece-39fe-452b-ab16-7ecb96d9c339.mp3",
+    "audio_url": "https://bfilhkxyjiofkfqwqyep.supabase.co/storage/v1/object/public/sounds/generated/ecbd2ece-39fe-452b-ab16-7ecb96d9c339.mp3",
+    "duration_seconds": 35
+  },
+  {
+    "id": "411a430a-fc90-4d04-9010-91d879224844",
+    "cat": "mixes",
+    "title": "Fire Rain Night Blend",
+    "tip": "Listen for 40 to 60 minutes for fire and rain calm layering.",
+    "audio_path": "generated/411a430a-fc90-4d04-9010-91d879224844.mp3",
+    "audio_url": "https://bfilhkxyjiofkfqwqyep.supabase.co/storage/v1/object/public/sounds/generated/411a430a-fc90-4d04-9010-91d879224844.mp3",
+    "duration_seconds": 36
+  },
+  {
+    "id": "acc8acc5-617d-4e4c-85df-56ddd44b5e03",
+    "cat": "mixes",
+    "title": "Ocean Forest Soft Mix",
+    "tip": "Listen for 40 to 60 minutes for shore and woodland air blending.",
+    "audio_path": "generated/acc8acc5-617d-4e4c-85df-56ddd44b5e03.mp3",
+    "audio_url": "https://bfilhkxyjiofkfqwqyep.supabase.co/storage/v1/object/public/sounds/generated/acc8acc5-617d-4e4c-85df-56ddd44b5e03.mp3",
+    "duration_seconds": 34
+  },
+  {
+    "id": "029deae6-b8d5-4375-9c8d-70827c2f298b",
+    "cat": "mixes",
+    "title": "Soft Storm Drift Mix",
+    "tip": "Play for 30 to 60 minutes for soft storm texture and release.",
+    "audio_path": "generated/029deae6-b8d5-4375-9c8d-70827c2f298b.mp3",
+    "audio_url": "https://bfilhkxyjiofkfqwqyep.supabase.co/storage/v1/object/public/sounds/generated/029deae6-b8d5-4375-9c8d-70827c2f298b.mp3",
+    "duration_seconds": 37
+  },
+  {
+    "id": "284cc885-0f95-434f-8174-b6b97bdef4cc",
+    "cat": "mixes",
+    "title": "Bird River Day Blend",
+    "tip": "Listen for 25 to 40 minutes for bright air and flowing water together.",
+    "audio_path": "generated/284cc885-0f95-434f-8174-b6b97bdef4cc.mp3",
+    "audio_url": "https://bfilhkxyjiofkfqwqyep.supabase.co/storage/v1/object/public/sounds/generated/284cc885-0f95-434f-8174-b6b97bdef4cc.mp3",
+    "duration_seconds": 33
+  }
+]

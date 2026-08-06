@@ -50,7 +50,7 @@ export default function HomePage() {
     const started = await playSound(sound, {
       queue: playableQueue,
       queueIndex: index >= 0 ? index : 0,
-      queueLabel: queueLabel ?? (queue ? 'Queue' : 'Catalog'),
+      queueLabel: queueLabel ?? (queue ? 'Queue' : 'All sounds'),
     });
     if (started) router.push('/player');
   };
@@ -116,7 +116,7 @@ export default function HomePage() {
       {categories.length ? (
         <section>
           <div className="mb-4">
-            <h3 className="text-xl font-semibold">Browse moods</h3>
+            <h3 className="text-xl font-semibold">Categories</h3>
             <p className="text-sm text-muted">Open a category to play only those sounds</p>
           </div>
           <div className="flex gap-4 overflow-x-auto pb-2">

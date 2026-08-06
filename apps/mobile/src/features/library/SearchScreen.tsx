@@ -155,7 +155,7 @@ export function SearchScreen() {
                 const started = await playSound(item, {
                   queue: filtered,
                   queueIndex: index,
-                  queueLabel: 'Search results',
+                  queueLabel: query.trim() ? 'Search results' : 'All sounds',
                 });
                 if (started) navigation.navigate('Player', { soundId: item.id });
               }}

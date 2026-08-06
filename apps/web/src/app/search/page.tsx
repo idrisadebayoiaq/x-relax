@@ -50,7 +50,7 @@ export default function SearchPage() {
     const started = await playSound(sound, {
       queue: filtered,
       queueIndex: index,
-      queueLabel: query.trim() ? 'Search results' : 'Catalog',
+      queueLabel: query.trim() ? 'Search results' : 'All sounds',
     });
     if (started) router.push('/player');
   };

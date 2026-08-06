@@ -20,18 +20,24 @@ export default function CategoryPage() {
     if (!id) return;
     const supabase = createClient();
     void (async () => {
-      const [{ data: cat }, { data: rows }] = await Promise.all([
+      const [{ data: cat }, { data: linkRows }] = await Promise.all([
         supabase.from('categories').select('*').eq('id', id).maybeSingle(),
-        supabase
-          .from('sound_categories')
-          .select('sound:sounds(*)')
-          .eq('category_id', id),
+        supabase.from('sound_categories').select('sound_id').eq('category_id', id),
       ]);
       setCategory((cat as Category) ?? null);
-      const list = ((rows ?? []) as unknown as { sound: Sound | Sound[] | null }[])
-        .map((r) => (Array.isArray(r.sound) ? r.sound[0] : r.sound))
-        .filter((s): s is Sound => !!s && s.status === 'published');
-      setSounds(list);
+      const ids = [...new Set((linkRows ?? []).map((r) => r.sound_id as string).filter(Boolean))];
+      if (!ids.length) {
+        setSounds([]);
+        setLoading(false);
+        return;
+      }
+      const { data: soundRows } = await supabase
+        .from('sounds')
+        .select('*')
+        .in('id', ids)
+        .eq('status', 'published')
+        .order('play_count', { ascending: false });
+      setSounds((soundRows as Sound[]) ?? []);
       setLoading(false);
     })();
   }, [id]);

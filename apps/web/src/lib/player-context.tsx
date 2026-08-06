@@ -56,7 +56,7 @@ type PlayerContextValue = {
 };
 
 const PlayerContext = createContext<PlayerContextValue | undefined>(undefined);
-const PLAY_COUNT_THRESHOLD_SEC = 15;
+const PLAY_COUNT_THRESHOLD_SEC = 5;
 
 export function PlayerProvider({ children }: { children: ReactNode }) {
   const supabase = useMemo(() => createClient(), []);
@@ -82,6 +82,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const isLoopingRef = useRef(false);
   const sleepEndsAtRef = useRef<number | null>(null);
   const listenSecondsRef = useRef(0);
+  const lastAudioPosRef = useRef(0);
   const playCountedRef = useRef(false);
   const lastHistoryWrite = useRef(0);
   const playNextRef = useRef<() => Promise<boolean>>(async () => false);
@@ -96,15 +97,24 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const recordPlayIfEligible = useCallback(
     async (sound: Sound, listenedSec: number) => {
       if (playCountedRef.current || listenedSec < PLAY_COUNT_THRESHOLD_SEC) return;
-      const { error } = await supabase.rpc('record_sound_listen', {
+      playCountedRef.current = true;
+      const { data, error } = await supabase.rpc('record_sound_listen', {
         p_sound_id: sound.id,
         p_listened_seconds: listenedSec,
       });
-      if (!error) {
-        playCountedRef.current = true;
+      if (error) {
+        playCountedRef.current = false;
+        return;
+      }
+      const payload = data as { counted?: boolean; play_count?: number } | null;
+      if (payload?.counted) {
+        const nextCount =
+          typeof payload.play_count === 'number' ? payload.play_count : sound.play_count + 1;
         setCurrent((prev) =>
-          prev && prev.id === sound.id ? { ...prev, play_count: prev.play_count + 1 } : prev,
+          prev && prev.id === sound.id ? { ...prev, play_count: nextCount } : prev,
         );
+      } else {
+        playCountedRef.current = false;
       }
     },
     [supabase],
@@ -172,15 +182,23 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       audio.onpause = () => setIsPlaying(false);
       audio.onloadedmetadata = () => setDurationMs((audio.duration || 0) * 1000);
       audio.ontimeupdate = () => {
-        setPositionMs((audio.currentTime || 0) * 1000);
-        listenSecondsRef.current = audio.currentTime || 0;
+        const posSec = audio.currentTime || 0;
+        setPositionMs(posSec * 1000);
+        const lastPos = lastAudioPosRef.current;
+        if (posSec >= lastPos) {
+          listenSecondsRef.current += posSec - lastPos;
+        } else {
+          // Seek backward or loop restart — count remaining of prior segment.
+          listenSecondsRef.current += Math.max(0, (audio.duration || lastPos) - lastPos) + posSec;
+        }
+        lastAudioPosRef.current = posSec;
         void recordPlayIfEligible(sound, Math.floor(listenSecondsRef.current));
 
         const now = Date.now();
         if (user && now - lastHistoryWrite.current > 15000) {
           lastHistoryWrite.current = now;
-          const completed = !!audio.duration && audio.currentTime / audio.duration > 0.9;
-          void writeHistory(sound, audio.currentTime, completed);
+          const completed = !!audio.duration && posSec / audio.duration > 0.9;
+          void writeHistory(sound, posSec, completed);
         }
       };
       audio.onended = () => {
@@ -221,6 +239,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       if (!resolvedUrl) return false;
       await unload();
       listenSecondsRef.current = 0;
+      lastAudioPosRef.current = 0;
       playCountedRef.current = false;
 
       setQueue(nextQueue);

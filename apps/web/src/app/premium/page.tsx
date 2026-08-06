@@ -28,7 +28,7 @@ export default function PremiumPage() {
         <h1 className="text-3xl font-serif font-bold">Premium</h1>
         <p className="text-muted mt-2">
           {isPremium
-            ? 'You have Premium — unlimited calm, mixes, and offline downloads.'
+            ? 'You have Premium · unlimited calm, mixes, and offline downloads.'
             : 'Unlock unlimited listening, sleep timer, Mix Studio, and offline downloads.'}
         </p>
       </div>
@@ -36,7 +36,7 @@ export default function PremiumPage() {
       {!isPremium ? (
         <div className="card p-5 space-y-2">
           <p className="font-semibold">Free plan</p>
-          <p className="text-sm text-muted whitespace-pre-line">{`· Unlock ${FREE_DAILY_SOUND_LIMIT} different sounds per day\n· Unlimited replays of those ${FREE_DAILY_SOUND_LIMIT} the same day\n· No other sounds until tomorrow\n· Mix Studio locked\n· No offline downloads — internet required`}</p>
+          <p className="text-sm text-muted whitespace-pre-line">{`· Unlock ${FREE_DAILY_SOUND_LIMIT} different sounds per day\n· Unlimited replays of those ${FREE_DAILY_SOUND_LIMIT} the same day\n· No other sounds until tomorrow\n· Mix Studio locked\n· No offline downloads · internet required`}</p>
         </div>
       ) : null}
 

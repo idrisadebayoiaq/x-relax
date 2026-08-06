@@ -60,7 +60,7 @@ type PlayerContextValue = {
 };
 
 const PlayerContext = createContext<PlayerContextValue | undefined>(undefined);
-const PLAY_COUNT_THRESHOLD_SEC = 15;
+const PLAY_COUNT_THRESHOLD_SEC = 5;
 
 function isActivelyPlaying(status: AudioStatus) {
   return (
@@ -137,17 +137,24 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   const recordPlayIfEligible = useCallback(async (sound: Sound, listenedSec: number) => {
     if (playCountedRef.current || listenedSec < PLAY_COUNT_THRESHOLD_SEC) return;
-    const { error } = await supabase.rpc('record_sound_listen', {
+    playCountedRef.current = true;
+    const { data, error } = await supabase.rpc('record_sound_listen', {
       p_sound_id: sound.id,
       p_listened_seconds: listenedSec,
     });
-    if (!error) {
-      playCountedRef.current = true;
+    if (error) {
+      playCountedRef.current = false;
+      return;
+    }
+    const payload = data as { counted?: boolean; play_count?: number } | null;
+    if (payload?.counted) {
+      const nextCount =
+        typeof payload.play_count === 'number' ? payload.play_count : sound.play_count + 1;
       setCurrent((prev) =>
-        prev && prev.id === sound.id
-          ? { ...prev, play_count: prev.play_count + 1 }
-          : prev,
+        prev && prev.id === sound.id ? { ...prev, play_count: nextCount } : prev,
       );
+    } else {
+      playCountedRef.current = false;
     }
   }, []);
 
