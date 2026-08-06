@@ -20,6 +20,7 @@ export function stopExternalMixPlayback() {
 export function releaseMixLayers(layers: MixLayer[]) {
   for (const layer of layers) {
     try {
+      layer.player?.clearLockScreenControls();
       layer.player?.pause();
       layer.player?.remove();
     } catch {
@@ -36,6 +37,18 @@ export async function startMixLayers(layers: MixLayer[]): Promise<MixLayer[]> {
       const player = createAudioPlayer({ uri: layer.sound.audio_url }, { updateInterval: 1000 });
       player.loop = true;
       player.volume = layer.volume;
+      if (started.length === 0) {
+        player.setActiveForLockScreen(
+          true,
+          {
+            title: layer.sound.title,
+            artist: 'X-Relax Mix',
+            albumTitle: 'Mix Studio',
+            artworkUrl: layer.sound.cover_url ?? undefined,
+          },
+          { showSeekForward: false, showSeekBackward: false },
+        );
+      }
       player.play();
       started.push({ ...layer, player });
     } catch {

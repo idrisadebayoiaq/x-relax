@@ -106,10 +106,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   isLoopingRef.current = isLooping;
 
   useEffect(() => {
+    // doNotMix is required for lock-screen / notification media controls.
     setAudioModeAsync({
       playsInSilentMode: true,
       shouldPlayInBackground: true,
-      interruptionMode: 'duckOthers',
+      interruptionMode: 'doNotMix',
       shouldRouteThroughEarpiece: false,
       allowsRecording: false,
     }).catch(() => undefined);
@@ -251,6 +252,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     statusSubRef.current = null;
     if (soundRef.current) {
       try {
+        soundRef.current.clearLockScreenControls();
         soundRef.current.pause();
         soundRef.current.remove();
       } catch {
@@ -305,6 +307,23 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         'playbackStatusUpdate',
         onPlaybackStatus,
       );
+
+      const album =
+        (nextQueueLabel !== undefined ? nextQueueLabel : queueLabelRef.current) || 'X-Relax';
+      // Activates Android media notification + lock-screen controls (keeps audio alive while locked).
+      player.setActiveForLockScreen(
+        true,
+        {
+          title: sound.title,
+          artist: 'X-Relax',
+          albumTitle: album,
+          artworkUrl: sound.cover_url ?? undefined,
+        },
+        {
+          showSeekForward: true,
+          showSeekBackward: true,
+        },
+      );
       player.play();
       soundRef.current = player;
       setCurrent(sound);
@@ -332,6 +351,15 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       if (!sound.audio_url) return false;
 
       stopExternalMixPlayback();
+
+      // Re-assert media session mode in case Mix Studio changed it.
+      await setAudioModeAsync({
+        playsInSilentMode: true,
+        shouldPlayInBackground: true,
+        interruptionMode: 'doNotMix',
+        shouldRouteThroughEarpiece: false,
+        allowsRecording: false,
+      }).catch(() => undefined);
 
       const userId = user?.id ?? null;
       const claim = await claimDailySoundPlay(userId, sound.id, hasUnlimitedListening);

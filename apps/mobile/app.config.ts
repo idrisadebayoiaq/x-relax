@@ -7,7 +7,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: 'X-Relax',
   slug: 'x-relax',
-  version: '1.0.7',
+  version: '1.0.8',
   orientation: 'portrait',
   icon: './assets/brand/app-icon.png',
   userInterfaceStyle: 'automatic',
@@ -21,6 +21,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ios: {
     supportsTablet: true,
     bundleIdentifier: 'com.xrelax.app',
+    infoPlist: {
+      UIBackgroundModes: ['audio'],
+    },
   },
   android: {
     package: 'com.xrelax.app',
@@ -31,6 +34,11 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       backgroundColor: '#000000',
     },
     predictiveBackGestureEnabled: false,
+    permissions: [
+      'WAKE_LOCK',
+      'FOREGROUND_SERVICE',
+      'FOREGROUND_SERVICE_MEDIA_PLAYBACK',
+    ],
   },
   notification: {
     icon: './assets/brand/notification-icon.png',
@@ -56,6 +64,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       'expo-audio',
       {
         microphonePermission: false,
+        enableBackgroundPlayback: true,
       },
     ],
     [

@@ -149,7 +149,7 @@ export function MixStudioScreen() {
     await setAudioModeAsync({
       playsInSilentMode: true,
       shouldPlayInBackground: true,
-      interruptionMode: 'mixWithOthers',
+      interruptionMode: 'doNotMix',
       shouldRouteThroughEarpiece: false,
       allowsRecording: false,
     }).catch(() => undefined);
