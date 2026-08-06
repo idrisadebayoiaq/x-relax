@@ -49,6 +49,7 @@ type PlayerContextValue = {
   stopPlayback: () => Promise<void>;
   togglePlay: () => Promise<void>;
   seekBy: (deltaMs: number) => Promise<void>;
+  seekTo: (positionMs: number) => Promise<void>;
   setRate: (rate: number) => Promise<void>;
   toggleLoop: () => void;
   setSleepTimerMinutes: (minutes: number | null) => void;
@@ -86,6 +87,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const playCountedRef = useRef(false);
   const lastHistoryWrite = useRef(0);
   const playNextRef = useRef<() => Promise<boolean>>(async () => false);
+  const playPreviousRef = useRef<() => Promise<boolean>>(async () => false);
 
   currentRef.current = current;
   queueRef.current = queue;
@@ -397,6 +399,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }, [playSound]);
 
   playNextRef.current = playNext;
+  playPreviousRef.current = playPrevious;
 
   const togglePlay = useCallback(async () => {
     const audio = audioRef.current;
@@ -414,6 +417,12 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     const audio = audioRef.current;
     if (!audio) return;
     audio.currentTime = Math.max(0, audio.currentTime + deltaMs / 1000);
+  }, []);
+
+  const seekTo = useCallback(async (positionMs: number) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.currentTime = Math.max(0, positionMs / 1000);
   }, []);
 
   const setRate = useCallback(async (next: number) => {
@@ -479,6 +488,44 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(id);
   }, [sleepEndsAt, isLooping]);
 
+  // Browser media session — keeps OS/browser media controls alive when the tab is backgrounded.
+  useEffect(() => {
+    if (typeof navigator === 'undefined' || !('mediaSession' in navigator) || !current) return;
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: current.title,
+        artist: 'X-Relax',
+        album: queueLabelRef.current || 'X-Relax',
+        artwork: current.cover_url
+          ? [{ src: current.cover_url, sizes: '512x512', type: 'image/jpeg' }]
+          : [],
+      });
+      navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
+      navigator.mediaSession.setActionHandler('play', () => {
+        void audioRef.current?.play();
+      });
+      navigator.mediaSession.setActionHandler('pause', () => {
+        audioRef.current?.pause();
+      });
+      navigator.mediaSession.setActionHandler('previoustrack', () => {
+        void playPreviousRef.current();
+      });
+      navigator.mediaSession.setActionHandler('nexttrack', () => {
+        void playNextRef.current();
+      });
+      navigator.mediaSession.setActionHandler('seekbackward', () => {
+        const audio = audioRef.current;
+        if (audio) audio.currentTime = Math.max(0, audio.currentTime - 15);
+      });
+      navigator.mediaSession.setActionHandler('seekforward', () => {
+        const audio = audioRef.current;
+        if (audio) audio.currentTime = audio.currentTime + 15;
+      });
+    } catch {
+      /* media session unsupported */
+    }
+  }, [current, isPlaying]);
+
   useEffect(() => {
     return () => {
       flushPlayCount();
@@ -507,6 +554,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       stopPlayback,
       togglePlay,
       seekBy,
+      seekTo,
       setRate,
       toggleLoop,
       setSleepTimerMinutes,
@@ -530,6 +578,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       stopPlayback,
       togglePlay,
       seekBy,
+      seekTo,
       setRate,
       toggleLoop,
       setSleepTimerMinutes,

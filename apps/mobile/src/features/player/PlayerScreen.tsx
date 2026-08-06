@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
   Pressable,
@@ -66,6 +66,7 @@ export function PlayerScreen({ navigation }: Props) {
     playNext,
     playPrevious,
     seekBy,
+    seekTo,
     setRate,
     toggleLoop,
     setSleepTimerMinutes,
@@ -81,6 +82,7 @@ export function PlayerScreen({ navigation }: Props) {
   const [comment, setComment] = useState('');
   const [reviews, setReviews] = useState<ReviewRow[]>([]);
   const [ratingBusy, setRatingBusy] = useState(false);
+  const scrubWidthRef = useRef(1);
 
   useEffect(() => {
     if (!sleepEndsAt) return;
@@ -285,6 +287,28 @@ export function PlayerScreen({ navigation }: Props) {
     ]);
   };
 
+  const openSleepPicker = () => {
+    if (!isPremium) {
+      promptSleepTimerPremium();
+      return;
+    }
+    Alert.alert('Sleep timer', 'Sound keeps looping until the timer ends.', [
+      ...[10, 20, 30, 45, 60].map((m) => ({
+        text: `${m} minutes`,
+        onPress: () => applySleepTimer(m),
+      })),
+      ...(sleepEndsAt
+        ? [{ text: 'Clear timer', style: 'destructive' as const, onPress: () => applySleepTimer(null) }]
+        : []),
+      { text: 'Cancel', style: 'cancel' as const },
+    ]);
+  };
+
+  const cycleRate = () => {
+    const next = rate >= 1.5 ? 0.75 : Number((rate + 0.25).toFixed(2));
+    void setRate(next);
+  };
+
   if (!current) {
     return (
       <View style={[styles.empty, { backgroundColor: colors.background, paddingTop: insets.top + 24 }]}>
@@ -304,47 +328,131 @@ export function PlayerScreen({ navigation }: Props) {
   void sleepTick;
   const [g0, g1] = moodPaletteFor(current.title);
   const ratingLine = formatRatingSummary(avg, ratingCount);
+  const subtitle = queueLabel || 'X-Relax';
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       <LinearGradient
-        colors={isDark ? [g0, '#000', '#000'] : [g1, '#F3F0EA', '#FFF']}
-        locations={[0, 0.45, 1]}
+        colors={isDark ? [g0, '#0A0A0A', '#000'] : [g1, '#F3F0EA', '#FFF']}
+        locations={[0, 0.42, 1]}
         style={StyleSheet.absoluteFill}
       />
       <ScrollView
         contentContainerStyle={{
-          paddingTop: insets.top + 8,
-          paddingHorizontal: 24,
-          paddingBottom: insets.bottom + 40,
+          paddingTop: insets.top + 4,
+          paddingHorizontal: 22,
+          paddingBottom: insets.bottom + 36,
         }}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        <Pressable onPress={() => navigation.goBack()} hitSlop={12} style={styles.backRow}>
-          <Ionicons name="chevron-down" size={22} color={colors.textMuted} />
-          <Text style={[styles.back, { color: colors.textMuted }]}>Close</Text>
-        </Pressable>
-
-        <View style={styles.artWrap}>
-          <CoverArt title={current.title} uri={current.cover_url} size={280} rounded={24} />
+        <View style={styles.topBar}>
+          <Pressable onPress={() => navigation.goBack()} hitSlop={12} style={styles.iconHit}>
+            <Ionicons name="chevron-down" size={26} color={colors.text} />
+          </Pressable>
+          <View style={styles.topCenter}>
+            <Text style={[styles.playingFrom, { color: colors.textMuted }]}>NOW PLAYING</Text>
+            <Text style={[styles.playingTitle, { color: colors.text }]} numberOfLines={1}>
+              {subtitle}
+            </Text>
+          </View>
+          <Pressable
+            onPress={() => Share.share({ message: `Listen to ${current.title} on X-Relax` })}
+            hitSlop={12}
+            style={styles.iconHit}
+          >
+            <Ionicons name="ellipsis-vertical" size={20} color={colors.text} />
+          </Pressable>
         </View>
 
-        <Text style={[styles.title, { color: colors.text }]}>{current.title}</Text>
-        <Text style={[styles.sub, { color: colors.textMuted }]} numberOfLines={3}>
-          {current.description ?? 'X-Relax'}
+        <View style={styles.artWrap}>
+          <CoverArt title={current.title} uri={current.cover_url} size={300} rounded={18} />
+        </View>
+
+        <Text style={[styles.title, { color: colors.text }]} numberOfLines={2}>
+          {current.title}
+        </Text>
+        <Text style={[styles.artist, { color: colors.textMuted }]} numberOfLines={1}>
+          {current.description?.split('.')[0] || 'Ambient sound · X-Relax'}
         </Text>
         <Text style={[styles.statsLine, { color: colors.textMuted }]}>
           {formatPlayCount(playCount)}
           {ratingLine ? ` · ${ratingLine}` : ''}
+          {queue.length > 1 ? ` · ${queueIndex + 1}/${queue.length}` : ''}
         </Text>
-        {queue.length > 1 ? (
-          <Text style={[styles.queueMeta, { color: colors.textMuted }]}>
-            {queueLabel ? `${queueLabel} · ` : ''}Track {queueIndex + 1} of {queue.length}
-          </Text>
-        ) : null}
 
-        <View style={[styles.track, { backgroundColor: 'rgba(128,128,128,0.25)' }]}>
+        {/* Action row — sleep / loop / speed / favourite / playlist (replaces lyrics/likes style) */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.actionRow}
+        >
+          <ActionPill
+            icon={sleepEndsAt ? 'moon' : 'moon-outline'}
+            label={
+              sleepRemainingSec != null
+                ? formatSleepRemaining(sleepRemainingSec)
+                : isPremium
+                  ? 'Sleep'
+                  : 'Sleep'
+            }
+            active={!!sleepEndsAt}
+            onPress={openSleepPicker}
+            colors={colors}
+            locked={!isPremium && !sleepEndsAt}
+          />
+          <ActionPill
+            icon={isLooping || sleepEndsAt ? 'repeat' : 'repeat-outline'}
+            label="Loop"
+            active={isLooping || !!sleepEndsAt}
+            onPress={() => toggleLoop()}
+            colors={colors}
+          />
+          <ActionPill
+            icon="speedometer-outline"
+            label={`${rate.toFixed(2)}×`}
+            onPress={cycleRate}
+            colors={colors}
+          />
+          <ActionPill
+            icon={isFavourite ? 'heart' : 'heart-outline'}
+            label="Save"
+            active={isFavourite}
+            onPress={() => void toggleFavourite()}
+            colors={colors}
+          />
+          <ActionPill
+            icon="list-outline"
+            label="Playlist"
+            onPress={addToPlaylist}
+            colors={colors}
+          />
+          <ActionPill
+            icon={canDownloadOffline ? 'download-outline' : 'lock-closed-outline'}
+            label="Offline"
+            onPress={() => void downloadCurrent()}
+            colors={colors}
+          />
+          <ActionPill
+            icon="share-outline"
+            label="Share"
+            onPress={() => Share.share({ message: `Listen to ${current.title} on X-Relax` })}
+            colors={colors}
+          />
+        </ScrollView>
+
+        <Pressable
+          style={[styles.track, { backgroundColor: 'rgba(128,128,128,0.28)' }]}
+          onLayout={(e) => {
+            scrubWidthRef.current = e.nativeEvent.layout.width || 1;
+          }}
+          onPress={(e) => {
+            if (!durationMs) return;
+            const w = scrubWidthRef.current || 1;
+            const ratio = Math.min(1, Math.max(0, e.nativeEvent.locationX / w));
+            void seekTo(ratio * durationMs);
+          }}
+        >
           <View
             style={[
               styles.trackFill,
@@ -354,130 +462,77 @@ export function PlayerScreen({ navigation }: Props) {
               },
             ]}
           />
-        </View>
+          <View
+            style={[
+              styles.trackKnob,
+              {
+                left: `${Math.min(98, Math.max(0, progress * 100))}%` as `${number}%`,
+                backgroundColor: colors.text,
+              },
+            ]}
+          />
+        </Pressable>
         <View style={styles.timeRow}>
           <Text style={[styles.time, { color: colors.textMuted }]}>{formatMs(positionMs)}</Text>
           <Text style={[styles.time, { color: colors.textMuted }]}>{formatMs(durationMs)}</Text>
         </View>
 
         <View style={styles.controls}>
+          <Pressable onPress={cycleRate} style={styles.sideCtrl} hitSlop={10}>
+            <Ionicons name="shuffle-outline" size={22} color={colors.textMuted} />
+            <Text style={[styles.rateBadge, { color: colors.textMuted }]}>{rate.toFixed(2)}×</Text>
+          </Pressable>
           <Pressable
-            onPress={() => playPrevious()}
+            onPress={() => void playPrevious()}
             style={[styles.seek, { opacity: hasPrevious ? 1 : 0.35 }]}
             disabled={!hasPrevious}
           >
-            <Ionicons name="play-skip-back" size={26} color={colors.text} />
+            <Ionicons name="play-skip-back" size={30} color={colors.text} />
           </Pressable>
           <Pressable
-            style={[styles.playBtn, { backgroundColor: colors.inverse }]}
-            onPress={() => togglePlay()}
+            style={[styles.playBtn, { backgroundColor: isDark ? '#FFF' : colors.inverse }]}
+            onPress={() => void togglePlay()}
           >
             <Ionicons
               name={isPlaying ? 'pause' : 'play'}
-              size={28}
-              color={colors.inverseText}
+              size={32}
+              color={isDark ? '#000' : colors.inverseText}
+              style={!isPlaying ? { marginLeft: 3 } : undefined}
             />
           </Pressable>
           <Pressable
-            onPress={() => playNext()}
+            onPress={() => void playNext()}
             style={[styles.seek, { opacity: hasNext ? 1 : 0.35 }]}
             disabled={!hasNext}
           >
-            <Ionicons name="play-skip-forward" size={26} color={colors.text} />
+            <Ionicons name="play-skip-forward" size={30} color={colors.text} />
           </Pressable>
-        </View>
-
-        <View style={styles.chipRow}>
-          <Chip
-            icon="play-back"
-            label="-15s"
-            onPress={() => seekBy(-15000)}
-            colors={colors}
-          />
-          <Chip
-            icon="play-forward"
-            label="+15s"
-            onPress={() => seekBy(15000)}
-            colors={colors}
-          />
-        </View>
-
-        <View style={styles.chipRow}>
-          <Chip
-            icon={isLooping || sleepEndsAt ? 'repeat' : 'repeat-outline'}
-            label={sleepEndsAt ? 'Loop · sleep' : `Loop ${isLooping ? 'on' : 'off'}`}
-            onPress={() => toggleLoop()}
-            colors={colors}
-            active={isLooping || !!sleepEndsAt}
-          />
-          <Chip
-            icon="speedometer-outline"
-            label={`${rate.toFixed(2)}×`}
-            onPress={() => setRate(rate >= 1.5 ? 0.75 : Number((rate + 0.25).toFixed(2)))}
-            colors={colors}
-          />
-        </View>
-
-        <Text style={[styles.label, { color: colors.textMuted }]}>Sleep timer</Text>
-        {isPremium ? (
-          <>
-            <View style={styles.chipRow}>
-              {[10, 20, 30, 45, 60].map((m) => (
-                <Chip
-                  key={m}
-                  icon="moon-outline"
-                  label={`${m}m`}
-                  onPress={() => applySleepTimer(m)}
-                  colors={colors}
-                />
-              ))}
-              <Chip label="Clear" onPress={() => applySleepTimer(null)} colors={colors} />
-            </View>
-            {sleepRemainingSec != null ? (
-              <Text style={[styles.sleepHint, { color: colors.textMuted }]}>
-                Sleep timer · {formatSleepRemaining(sleepRemainingSec)} remaining · sound loops until
-                then
-              </Text>
-            ) : null}
-          </>
-        ) : (
           <Pressable
-            onPress={promptSleepTimerPremium}
-            style={[styles.lockedSleep, { borderColor: colors.border }]}
+            onPress={() => toggleLoop()}
+            style={styles.sideCtrl}
+            hitSlop={10}
           >
-            <Ionicons name="lock-closed-outline" size={16} color={colors.textMuted} />
-            <Text style={[styles.lockedSleepText, { color: colors.textMuted }]}>
-              Premium only · loops playback until the timer ends
-            </Text>
-          </Pressable>
-        )}
-
-        <Text style={[styles.label, { color: colors.textMuted }]}>Actions</Text>
-        <View style={styles.chipRow}>
-          <Chip
-            icon={isFavourite ? 'heart' : 'heart-outline'}
-            label={isFavourite ? 'Saved' : 'Favourite'}
-            onPress={() => toggleFavourite()}
-            colors={colors}
-            active={isFavourite}
-          />
-          <Chip icon="list-outline" label="Playlist" onPress={addToPlaylist} colors={colors} />
-          {canDownloadOffline ? (
-            <Chip icon="download-outline" label="Download" onPress={downloadCurrent} colors={colors} />
-          ) : (
-            <Chip
-              icon="lock-closed-outline"
-              label="Download · Premium"
-              onPress={downloadCurrent}
-              colors={colors}
+            <Ionicons
+              name={isLooping || sleepEndsAt ? 'repeat' : 'repeat-outline'}
+              size={24}
+              color={isLooping || sleepEndsAt ? colors.text : colors.textMuted}
             />
-          )}
-          <Chip
-            icon="share-outline"
-            label="Share"
-            onPress={() => Share.share({ message: `Listen to ${current.title} on X-Relax` })}
-            colors={colors}
-          />
+          </Pressable>
+        </View>
+
+        <View style={styles.seekChipRow}>
+          <Pressable
+            onPress={() => void seekBy(-15000)}
+            style={[styles.seekChip, { borderColor: colors.border }]}
+          >
+            <Text style={{ color: colors.text, fontFamily: 'DMSans_500Medium', fontSize: 13 }}>-15s</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => void seekBy(15000)}
+            style={[styles.seekChip, { borderColor: colors.border }]}
+          >
+            <Text style={{ color: colors.text, fontFamily: 'DMSans_500Medium', fontSize: 13 }}>+15s</Text>
+          </Pressable>
         </View>
 
         <Text style={[styles.label, { color: colors.textMuted }]}>Ratings & reviews</Text>
@@ -577,6 +632,59 @@ export function PlayerScreen({ navigation }: Props) {
   );
 }
 
+function ActionPill({
+  icon,
+  label,
+  onPress,
+  colors,
+  active,
+  locked,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  onPress: () => void;
+  colors: {
+    text: string;
+    textMuted: string;
+    border: string;
+    inverse: string;
+    inverseText: string;
+    surface: string;
+  };
+  active?: boolean;
+  locked?: boolean;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={[
+        styles.actionPill,
+        {
+          borderColor: active ? colors.text : colors.border,
+          backgroundColor: active
+            ? colors.inverse === '#FFF'
+              ? 'rgba(255,255,255,0.12)'
+              : 'rgba(0,0,0,0.06)'
+            : colors.surface,
+        },
+      ]}
+    >
+      <Ionicons name={icon} size={18} color={active ? colors.text : colors.textMuted} />
+      {locked ? (
+        <Ionicons
+          name="lock-closed"
+          size={10}
+          color={colors.textMuted}
+          style={{ position: 'absolute', top: 6, right: 6 }}
+        />
+      ) : null}
+      <Text style={[styles.actionLabel, { color: colors.text }]} numberOfLines={1}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
 function Chip({
   label,
   onPress,
@@ -624,51 +732,75 @@ function Chip({
 
 const styles = StyleSheet.create({
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  backRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 12 },
-  back: { fontFamily: 'DMSans_500Medium', fontSize: 15 },
-  artWrap: { alignItems: 'center', marginVertical: 16 },
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  iconHit: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  topCenter: { flex: 1, alignItems: 'center', paddingHorizontal: 8 },
+  playingFrom: {
+    fontFamily: 'DMSans_500Medium',
+    fontSize: 10,
+    letterSpacing: 1.4,
+  },
+  playingTitle: { fontFamily: 'DMSans_700Bold', fontSize: 13, marginTop: 2 },
+  artWrap: { alignItems: 'center', marginTop: 12, marginBottom: 22 },
   title: {
     fontFamily: 'Fraunces_700Bold',
-    fontSize: 28,
-    letterSpacing: -0.6,
-    textAlign: 'center',
+    fontSize: 26,
+    letterSpacing: -0.5,
+    textAlign: 'left',
   },
-  sub: {
+  artist: {
     fontFamily: 'DMSans_400Regular',
-    fontSize: 14,
-    lineHeight: 20,
-    textAlign: 'center',
-    marginTop: 8,
-    marginBottom: 4,
+    fontSize: 15,
+    marginTop: 6,
   },
   statsLine: {
     fontFamily: 'DMSans_500Medium',
-    fontSize: 13,
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  queueMeta: {
-    fontFamily: 'DMSans_500Medium',
     fontSize: 12,
-    textAlign: 'center',
-    marginBottom: 16,
+    marginTop: 6,
+    marginBottom: 14,
   },
-  track: { height: 4, borderRadius: 2, overflow: 'hidden' },
-  trackFill: { height: 4 },
-  timeRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 },
+  actionRow: { gap: 10, paddingVertical: 4, paddingRight: 8 },
+  actionPill: {
+    width: 76,
+    height: 64,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingHorizontal: 6,
+  },
+  actionLabel: { fontFamily: 'DMSans_500Medium', fontSize: 11 },
+  track: { height: 4, borderRadius: 2, marginTop: 18, justifyContent: 'center' },
+  trackFill: { height: 4, borderRadius: 2 },
+  trackKnob: {
+    position: 'absolute',
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginLeft: -6,
+  },
+  timeRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 },
   time: { fontFamily: 'DMSans_400Regular', fontSize: 12 },
   controls: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 28,
-    marginTop: 28,
+    justifyContent: 'space-between',
+    marginTop: 22,
     marginBottom: 8,
+    paddingHorizontal: 4,
   },
+  sideCtrl: { width: 44, alignItems: 'center', justifyContent: 'center', gap: 2 },
+  rateBadge: { fontFamily: 'DMSans_500Medium', fontSize: 10 },
   seek: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -678,6 +810,19 @@ const styles = StyleSheet.create({
     borderRadius: 36,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  seekChipRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 12,
+    marginTop: 10,
+    marginBottom: 8,
+  },
+  seekChip: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 999,
+    paddingHorizontal: 18,
+    paddingVertical: 8,
   },
   label: {
     fontFamily: 'DMSans_500Medium',
@@ -702,17 +847,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  sleepHint: { fontFamily: 'DMSans_400Regular', fontSize: 12, marginTop: 8 },
-  lockedSleep: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  lockedSleepText: { flex: 1, fontFamily: 'DMSans_400Regular', fontSize: 13, lineHeight: 18 },
   ratingCard: {
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 16,
