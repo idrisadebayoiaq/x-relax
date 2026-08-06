@@ -1,0 +1,2 @@
+-- Applied remotely via MCP: categories_cover_and_create_rpc
+-- categories.cover_url, categories.created_by, create_category RPC

@@ -1,0 +1,56 @@
+# Dependencies
+node_modules/
+
+# Env & secrets
+.env
+.env.*
+!.env.example
+**/google-services.json
+**/GoogleService-Info.plist
+**/firebase-adminsdk*.json
+*-firebase-adminsdk-*.json
+supabase/_vault_*.sql
+supabase/_vault_*.json
+supabase/_write_vault_*.js
+supabase/.secrets.env
+scripts/.env.seed
+
+# Large local audio (seeded to Supabase Storage — keep brand only)
+assets/birds sounds/
+assets/fireplace sounds/
+assets/forest sounds/
+assets/meditation/
+assets/mix sounds/
+assets/ocean sounds/
+assets/rain sounds/
+assets/rivers sounds/
+assets/thunders sounds/
+assets/wind sounds/
+content/generated/
+content/sound-list.txt
+
+# Expo / RN
+.expo/
+dist/
+.next/
+web-build/
+*.jks
+*.p8
+*.p12
+*.mobileprovision
+*.orig.*
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Debug
+npm-debug.*
+yarn-error.log
+*.log
+
+# TypeScript
+*.tsbuildinfo

@@ -1,0 +1,2 @@
+-- Applied remotely as: phase1_storage_buckets
+-- Buckets: avatars, covers, sounds, payment-proofs, artist-documents, reports + storage RLS.

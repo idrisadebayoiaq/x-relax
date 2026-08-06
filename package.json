@@ -1,0 +1,26 @@
+{
+    "name":  "x-relax",
+    "version":  "1.0.0",
+    "description":  "Relaxation audio platform — React Native (Expo) + Supabase.",
+    "main":  "index.js",
+    "directories":  {
+                        "doc":  "docs"
+                    },
+    "scripts":  {
+                    "seed:catalog":  "node scripts/seed-catalog.mjs",
+                    "dev:admin":  "npm run dev --prefix admin-web",
+                    "dev:web":  "npm run dev --prefix apps/web",
+                    "build:admin":  "npm run build --prefix admin-web",
+                    "build:web":  "npm run build --prefix apps/web"
+                },
+    "keywords":  [
+
+                 ],
+    "author":  "",
+    "license":  "ISC",
+    "type":  "commonjs",
+    "dependencies":  {
+                         "@supabase/supabase-js":  "^2.112.0",
+                         "sharp":  "^0.35.3"
+                     }
+}

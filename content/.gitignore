@@ -1,0 +1,7 @@
+# Keep local catalog + media out of git by default.
+# Commit catalog.template.csv only.
+catalog.csv
+audio/
+covers/
+!audio/.gitkeep
+!covers/.gitkeep

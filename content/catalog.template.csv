@@ -1,0 +1,4 @@
+title,description,category_slug,tags,duration_seconds,is_premium_only,audio_filename,cover_filename
+Soft Rain Forest,Gentle rain under canopy,nature,"rain,forest,ambient",600,false,soft-rain-forest.mp3,soft-rain-forest.jpg
+Midnight Focus,Low drone for deep work,focus,"focus,drone,work",900,false,midnight-focus.mp3,midnight-focus.jpg
+Deep Sleep Tide,Slow ocean bed for sleep,sleep,"ocean,sleep,night",1200,true,deep-sleep-tide.mp3,deep-sleep-tide.jpg
