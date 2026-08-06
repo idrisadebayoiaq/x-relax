@@ -54,7 +54,7 @@ export default function PremiumPage() {
       <div className="flex flex-wrap gap-3">
         <Link href="/premium/payments" className="chip">My payment requests</Link>
         <Link href="/mix" className="chip">Mix Studio</Link>
-        {isAdmin ? <Link href="/admin" className="chip">Admin dashboard</Link> : null}
+        {isAdmin ? <Link href="/admin" className="chip">Open admin dashboard</Link> : null}
       </div>
 
       {!hasPremiumAccess ? (

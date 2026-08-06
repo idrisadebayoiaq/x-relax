@@ -3,7 +3,6 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
-import { getAdminDashboardUrl } from '@/lib/admin-url';
 import { PlayerBar } from '@/components/PlayerBar';
 
 const MAIN_NAV = [
@@ -25,7 +24,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     pathname.startsWith('/forgot-password') ||
     pathname.startsWith('/legal');
 
+  const isAdminPage = pathname.startsWith('/admin');
+
   if (isAuthPage) return <>{children}</>;
+
+  if (isAdminPage) {
+    return (
+      <div className="min-h-screen bg-background text-foreground">
+        <main className="p-4 md:p-6">{children}</main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex">
@@ -78,14 +87,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {isAdmin ? (
           <>
             <p className="text-[11px] uppercase tracking-wider text-muted mt-4 mb-1 px-2">Admin</p>
-            <a
-              href={getAdminDashboardUrl()}
-              target="_blank"
-              rel="noreferrer"
-              className="rounded-xl px-3 py-2 text-sm hover:bg-background block"
-            >
-              Admin dashboard ↗
-            </a>
+            <Link href="/admin" className="rounded-xl px-3 py-2 text-sm hover:bg-background">
+              Admin dashboard
+            </Link>
           </>
         ) : null}
         <div className="mt-auto pt-4 border-t border-border">
@@ -117,6 +121,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 {item.label}
               </Link>
             ))}
+            {isAdmin ? (
+              <Link href="/admin" className={pathname.startsWith('/admin') ? 'font-bold' : 'text-muted'}>
+                Admin
+              </Link>
+            ) : null}
           </nav>
         </header>
         <main className="flex-1 p-4 md:p-6 pb-28">{children}</main>

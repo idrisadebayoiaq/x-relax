@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { CoverArt } from '@/components/CoverArt';
 import { createClient } from '@/lib/supabase/client';
@@ -25,20 +24,29 @@ export default function AdminModerationPage() {
   }, [isAdmin]);
 
   const review = async (id: string, status: 'published' | 'rejected') => {
-    const { error } = await createClient().rpc('moderate_sound', {
+    const supabase = createClient();
+    const { error } = await supabase.rpc('moderate_sound', {
       p_sound_id: id,
       p_status: status,
       p_reason: status === 'rejected' ? 'Did not meet quality or policy guidelines' : null,
     });
     if (error) alert(error.message);
-    else void load();
+    else {
+      await supabase.rpc('log_admin_action', {
+        p_action: 'moderate_sound',
+        p_entity_type: 'sound',
+        p_entity_id: id,
+        p_meta: { status },
+      });
+      void load();
+    }
   };
 
-  if (!isAdmin) return <p className="text-muted">Admin only.</p>;
+  if (!isAdmin) return null;
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
-      <h1 className="text-3xl font-serif font-bold">Moderation</h1>
+    <div className="space-y-6">
+      <h2 className="text-xl font-semibold">Sound moderation</h2>
       <div className="space-y-3">
         {rows.map((item) => (
           <div key={item.id} className="card p-4">

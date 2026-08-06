@@ -1,7 +1,6 @@
 import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
-  Linking,
   Pressable,
   RefreshControl,
   StyleSheet,
@@ -12,7 +11,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAppTheme } from '../../lib/useAppTheme';
-import { getAdminDashboardUrl } from '../../lib/adminUrl';
 import { useAuth } from '../auth/AuthProvider';
 import { supabase } from '../../lib/supabase';
 import type { RootStackParamList } from '../../navigation/types';
@@ -170,25 +168,9 @@ export function CreatorScreen() {
           <SectionLabel>Admin</SectionLabel>
           <OutlineRow
             label="Admin dashboard"
-            hint="Payments, moderation, APK uploads, admin team"
-            icon="globe-outline"
-            onPress={() => void Linking.openURL(getAdminDashboardUrl())}
-          />
-          <SectionLabel>Quick admin tools</SectionLabel>
-          <OutlineRow
-            label="Sound moderation"
-            icon="checkmark-done-outline"
-            onPress={() => navigation.navigate('AdminModeration')}
-          />
-          <OutlineRow
-            label="Verification queue"
-            icon="people-outline"
-            onPress={() => navigation.navigate('AdminVerifications')}
-          />
-          <OutlineRow
-            label="Withdrawal queue"
-            icon="cash-outline"
-            onPress={() => navigation.navigate('AdminWithdrawals')}
+            hint="Payments, moderation, verifications, withdrawals"
+            icon="shield-checkmark-outline"
+            onPress={() => navigation.navigate('AdminHub')}
           />
           <Pressable
             style={[styles.runBtn, { borderColor: colors.border }]}

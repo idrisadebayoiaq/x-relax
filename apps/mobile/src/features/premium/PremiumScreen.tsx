@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Linking,
   Pressable,
   StyleSheet,
   Text,
@@ -11,7 +10,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAppTheme } from '../../lib/useAppTheme';
-import { getAdminDashboardUrl } from '../../lib/adminUrl';
 import { useAuth } from '../auth/AuthProvider';
 import { supabase } from '../../lib/supabase';
 import { FREE_DAILY_SOUND_LIMIT } from '../../lib/dailyListenLimit';
@@ -113,20 +111,12 @@ export function PremiumScreen() {
         onPress={() => navigation.navigate('MyPayments')}
       />
       {isAdmin ? (
-        <>
-          <OutlineRow
-            label="Admin dashboard"
-            hint="Full ops console in browser"
-            icon="globe-outline"
-            onPress={() => void Linking.openURL(getAdminDashboardUrl())}
-          />
-          <OutlineRow
-            label="Admin · review payments"
-            hint="Quick mobile queue"
-            icon="shield-checkmark-outline"
-            onPress={() => navigation.navigate('AdminPayments')}
-          />
-        </>
+        <OutlineRow
+          label="Admin dashboard"
+          hint="Payments, moderation, and more"
+          icon="shield-checkmark-outline"
+          onPress={() => navigation.navigate('AdminHub')}
+        />
       ) : null}
       <OutlineRow
         label="Sound mixing studio"

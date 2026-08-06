@@ -3,19 +3,6 @@ import { NextResponse, type NextRequest } from 'next/server';
 
 const PUBLIC_PREFIXES = ['/login', '/signup', '/forgot-password', '/legal', '/download'];
 
-const ADMIN_ROUTE_MAP: Record<string, string> = {
-  '/admin': '/',
-  '/admin/payments': '/payments',
-  '/admin/moderation': '/moderation',
-  '/admin/verifications': '/verifications',
-  '/admin/withdrawals': '/withdrawals',
-  '/admin/releases': '/releases',
-};
-
-function getAdminDashboardUrl() {
-  return process.env.NEXT_PUBLIC_ADMIN_WEB_URL ?? 'http://localhost:3000';
-}
-
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
@@ -64,8 +51,7 @@ export async function updateSession(request: NextRequest) {
       return NextResponse.redirect(url);
     }
 
-    const adminPath = ADMIN_ROUTE_MAP[path] ?? '/';
-    return NextResponse.redirect(`${getAdminDashboardUrl()}${adminPath}`);
+    return supabaseResponse;
   }
 
   if (!user && !isPublic) {

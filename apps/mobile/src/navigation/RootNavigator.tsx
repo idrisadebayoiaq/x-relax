@@ -16,6 +16,7 @@ import { CreatorUploadScreen } from '../features/creator/CreatorUploadScreen';
 import { CreatorSoundsScreen } from '../features/creator/CreatorSoundsScreen';
 import { CreatorVerificationScreen } from '../features/creator/CreatorVerificationScreen';
 import { CreatorWithdrawalsScreen } from '../features/creator/CreatorWithdrawalsScreen';
+import { AdminHubScreen } from '../features/creator/AdminHubScreen';
 import { AdminModerationScreen } from '../features/creator/AdminModerationScreen';
 import { AdminVerificationsScreen } from '../features/creator/AdminVerificationsScreen';
 import { AdminWithdrawalsScreen } from '../features/creator/AdminWithdrawalsScreen';
@@ -40,6 +41,7 @@ function AppStack() {
       <Stack.Screen name="PaymentCheckout" component={PaymentCheckoutScreen} />
       <Stack.Screen name="MyPayments" component={MyPaymentsScreen} />
       <Stack.Screen name="AdminPayments" component={AdminPaymentsScreen} />
+      <Stack.Screen name="AdminHub" component={AdminHubScreen} />
       <Stack.Screen name="MixStudio" component={MixStudioScreen} />
       <Stack.Screen name="BecomeCreator" component={BecomeCreatorScreen} />
       <Stack.Screen name="CreatorUpload" component={CreatorUploadScreen} />

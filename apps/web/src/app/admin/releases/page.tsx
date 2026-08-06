@@ -112,10 +112,12 @@ export default function AdminReleasesPage() {
 
   return (
     <div className="max-w-3xl mx-auto space-y-8">
-      <Link href="/download" className="text-sm text-muted underline">
-        ← Public download page
-      </Link>
-      <h1 className="text-3xl font-serif font-bold">App releases</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-xl font-semibold">App releases</h2>
+        <Link href="/download" className="text-sm text-muted underline">
+          Public download page →
+        </Link>
+      </div>
       <p className="text-muted text-sm">
         Upload APK files and control what users see on the download page — including &quot;coming soon&quot; cards.
       </p>

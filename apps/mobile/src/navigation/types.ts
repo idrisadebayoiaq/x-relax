@@ -20,6 +20,7 @@ export type RootStackParamList = {
   PaymentCheckout: { planId: string };
   MyPayments: undefined;
   AdminPayments: undefined;
+  AdminHub: undefined;
   MixStudio: undefined;
   BecomeCreator: undefined;
   CreatorUpload: undefined;

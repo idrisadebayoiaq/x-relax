@@ -3,7 +3,6 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { CoverArt } from '@/components/CoverArt';
-import { getAdminDashboardUrl } from '@/lib/admin-url';
 import { useAuth } from '@/lib/auth-context';
 
 export default function ProfilePage() {
@@ -43,11 +42,7 @@ export default function ProfilePage() {
       <button type="button" className="btn btn-primary w-full" disabled={busy} onClick={() => void save()}>Save profile</button>
       <div className="space-y-2">
         {!isCreator ? <Link href="/creator/become" className="card block p-4">Become a Creator</Link> : <Link href="/creator" className="card block p-4">Creator dashboard</Link>}
-        {isAdmin ? (
-          <a href={getAdminDashboardUrl()} target="_blank" rel="noreferrer" className="card block p-4">
-            Admin dashboard ↗
-          </a>
-        ) : null}
+        {isAdmin ? <Link href="/admin" className="card block p-4">Admin dashboard</Link> : null}
         <Link href="/notifications" className="card block p-4">Notifications</Link>
         <Link href="/legal/privacy" className="card block p-4">Privacy Policy</Link>
         <Link href="/legal/terms" className="card block p-4">Terms of Use</Link>
