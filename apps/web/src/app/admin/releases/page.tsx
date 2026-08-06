@@ -57,10 +57,14 @@ export default function AdminReleasesPage() {
       apkPath = `${safeVersion}/x-relax-${safeVersion}.apk`;
       const { error: uploadError } = await supabase.storage
         .from('app-releases')
-        .upload(apkPath, apkFile, { upsert: true, contentType: 'application/vnd.android.package-archive' });
+        .upload(apkPath, apkFile, {
+          upsert: true,
+          contentType: 'application/vnd.android.package-archive',
+          cacheControl: '3600',
+        });
       if (uploadError) {
         setBusy(false);
-        return alert(uploadError.message);
+        return alert(uploadError.message || 'APK upload failed.');
       }
       fileSize = apkFile.size;
     }
