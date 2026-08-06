@@ -123,6 +123,7 @@ export type AppRelease = {
   description: string | null;
   status: AppReleaseStatus;
   apk_path: string | null;
+  download_url?: string | null;
   file_size_bytes: number | null;
   sort_order: number;
   created_at: string;

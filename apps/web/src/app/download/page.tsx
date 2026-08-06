@@ -24,7 +24,9 @@ export default function DownloadPage() {
   }, []);
 
   const apkUrl = (release: AppRelease) => {
+    if (release.download_url) return release.download_url;
     if (!release.apk_path) return null;
+    if (/^https?:\/\//i.test(release.apk_path)) return release.apk_path;
     const { data } = createClient().storage.from('app-releases').getPublicUrl(release.apk_path);
     return data.publicUrl;
   };

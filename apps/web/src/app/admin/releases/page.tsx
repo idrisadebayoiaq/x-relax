@@ -8,6 +8,8 @@ import { useAuth } from '@/lib/auth-context';
 import type { AppRelease, AppReleaseStatus } from '@/types/database';
 
 const STATUSES: AppReleaseStatus[] = ['coming_soon', 'available', 'archived'];
+/** Supabase Free global Storage limit is 50MB; APKs are usually larger. */
+const MAX_DIRECT_UPLOAD_BYTES = 45 * 1024 * 1024;
 
 export default function AdminReleasesPage() {
   const { isAdmin } = useAuth();
@@ -19,6 +21,7 @@ export default function AdminReleasesPage() {
     description: '',
     status: 'coming_soon' as AppReleaseStatus,
     sort_order: 0,
+    download_url: '',
   });
   const [apkFile, setApkFile] = useState<File | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -37,7 +40,14 @@ export default function AdminReleasesPage() {
   }, [isAdmin]);
 
   const resetForm = () => {
-    setForm({ version: '', title: '', description: '', status: 'coming_soon', sort_order: 0 });
+    setForm({
+      version: '',
+      title: '',
+      description: '',
+      status: 'coming_soon',
+      sort_order: 0,
+      download_url: '',
+    });
     setApkFile(null);
     setEditingId(null);
   };
@@ -51,8 +61,15 @@ export default function AdminReleasesPage() {
     const supabase = createClient();
     let apkPath: string | null = null;
     let fileSize: number | null = null;
+    const externalUrl = form.download_url.trim() || null;
 
     if (apkFile) {
+      if (apkFile.size > MAX_DIRECT_UPLOAD_BYTES) {
+        setBusy(false);
+        return alert(
+          `This APK is ${formatBytes(apkFile.size)}. Direct uploads are limited (~50MB on Free plans).\n\nPaste the Expo APK download link in “APK download URL” instead, or raise the global Storage file size limit in the Supabase dashboard (Pro).`,
+        );
+      }
       const safeVersion = form.version.trim().replace(/[^a-zA-Z0-9._-]/g, '_');
       apkPath = `${safeVersion}/x-relax-${safeVersion}.apk`;
       const { error: uploadError } = await supabase.storage
@@ -70,12 +87,13 @@ export default function AdminReleasesPage() {
     }
 
     const payload = {
-      version: form.version.trim(),
+      version: form.version.trim().replace(/^v/i, ''),
       title: form.title.trim(),
       description: form.description.trim() || null,
       status: form.status,
       sort_order: form.sort_order,
       updated_at: new Date().toISOString(),
+      ...(externalUrl ? { download_url: externalUrl } : {}),
       ...(apkPath ? { apk_path: apkPath, file_size_bytes: fileSize } : {}),
     };
 
@@ -101,6 +119,7 @@ export default function AdminReleasesPage() {
       description: release.description ?? '',
       status: release.status,
       sort_order: release.sort_order,
+      download_url: release.download_url ?? '',
     });
     setApkFile(null);
   };
@@ -123,7 +142,8 @@ export default function AdminReleasesPage() {
         </Link>
       </div>
       <p className="text-muted text-sm">
-        Upload APK files and control what users see on the download page — including &quot;coming soon&quot; cards.
+        Large APKs (over ~50MB) should use an Expo download URL. Direct file upload only works under the
+        Storage size limit.
       </p>
 
       <div className="card p-5 space-y-4">
@@ -131,13 +151,13 @@ export default function AdminReleasesPage() {
         <div className="grid gap-3 sm:grid-cols-2">
           <input
             className="input"
-            placeholder="Version (e.g. 1.2.0)"
+            placeholder="Version (e.g. 1.0.9)"
             value={form.version}
             onChange={(e) => setForm((f) => ({ ...f, version: e.target.value }))}
           />
           <input
             className="input"
-            placeholder="Title (e.g. X-Relax v1.2)"
+            placeholder="Title (e.g. X-Relax v1.0.9)"
             value={form.title}
             onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
           />
@@ -169,13 +189,31 @@ export default function AdminReleasesPage() {
           />
         </div>
         <div>
-          <label className="text-sm text-muted block mb-2">APK file (optional — upload when ready)</label>
+          <label className="text-sm text-muted block mb-2">
+            APK download URL (recommended for large builds)
+          </label>
+          <input
+            className="input"
+            placeholder="https://expo.dev/artifacts/eas/….apk"
+            value={form.download_url}
+            onChange={(e) => setForm((f) => ({ ...f, download_url: e.target.value }))}
+          />
+        </div>
+        <div>
+          <label className="text-sm text-muted block mb-2">
+            Or upload APK file (under ~45MB only)
+          </label>
           <input
             type="file"
             accept=".apk,application/vnd.android.package-archive,application/octet-stream"
             onChange={(e) => setApkFile(e.target.files?.[0] ?? null)}
           />
-          {apkFile ? <p className="text-sm text-muted mt-1">{apkFile.name} · {formatBytes(apkFile.size)}</p> : null}
+          {apkFile ? (
+            <p className="text-sm text-muted mt-1">
+              {apkFile.name} · {formatBytes(apkFile.size)}
+              {apkFile.size > MAX_DIRECT_UPLOAD_BYTES ? ' · too large for direct upload' : ''}
+            </p>
+          ) : null}
         </div>
         <div className="flex gap-2 flex-wrap">
           <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void saveRelease()}>
@@ -199,6 +237,8 @@ export default function AdminReleasesPage() {
                 <p className="text-sm text-muted">
                   v{release.version} · {release.status}
                   {release.file_size_bytes ? ` · ${formatBytes(release.file_size_bytes)}` : ''}
+                  {release.download_url ? ' · external URL' : ''}
+                  {release.apk_path ? ' · stored file' : ''}
                 </p>
               </div>
               <div className="flex gap-2">
