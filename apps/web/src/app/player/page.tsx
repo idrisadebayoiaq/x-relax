@@ -3,9 +3,9 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { CoverArt } from '@/components/CoverArt';
-import { formatMs } from '@/lib/format';
+import { SoundRatingPanel } from '@/components/SoundRatingPanel';
+import { formatMs, formatPlayCount, formatRatingSummary } from '@/lib/format';
 import { hasOfflineSound } from '@/lib/offline-storage';
-import { createClient } from '@/lib/supabase/client';
 import { downloadSoundForWeb, removeDownloadForWeb } from '@/lib/web-downloads';
 import { useAuth } from '@/lib/auth-context';
 import { usePlayer } from '@/lib/player-context';
@@ -22,6 +22,7 @@ export default function PlayerPage() {
     sleepEndsAt,
     queue,
     queueIndex,
+    queueLabel,
     hasNext,
     hasPrevious,
     togglePlay,
@@ -36,14 +37,20 @@ export default function PlayerPage() {
   } = usePlayer();
   const [downloaded, setDownloaded] = useState(false);
   const [downloadBusy, setDownloadBusy] = useState(false);
+  const [stats, setStats] = useState({ avg: 0, count: 0, plays: 0 });
 
   useEffect(() => {
     if (!current) {
       setDownloaded(false);
       return;
     }
+    setStats({
+      avg: Number(current.average_rating ?? 0),
+      count: Number(current.rating_count ?? 0),
+      plays: Number(current.play_count ?? 0),
+    });
     void hasOfflineSound(current.id).then(setDownloaded);
-  }, [current?.id]);
+  }, [current?.id, current?.average_rating, current?.rating_count, current?.play_count]);
 
   if (!current) {
     return (
@@ -57,20 +64,14 @@ export default function PlayerPage() {
   const progress = durationMs > 0 ? (positionMs / durationMs) * 100 : 0;
   const sleepRemaining =
     sleepEndsAt != null ? Math.max(0, Math.floor((sleepEndsAt - Date.now()) / 1000)) : null;
-
-  const rateSound = async (score: number) => {
-    if (!user) return;
-    await createClient().from('ratings').upsert({
-      user_id: user.id,
-      sound_id: current.id,
-      score,
-      updated_at: new Date().toISOString(),
-    });
-    alert(`Rated ${score} stars`);
-  };
+  const ratingLine = formatRatingSummary(stats.avg, stats.count);
 
   const toggleDownload = async () => {
-    if (!user || !canDownloadOffline) return;
+    if (!user) return;
+    if (!canDownloadOffline) {
+      alert('Offline downloads require Premium or admin access.');
+      return;
+    }
     setDownloadBusy(true);
     if (downloaded) {
       const result = await removeDownloadForWeb(user.id, current.id);
@@ -97,8 +98,14 @@ export default function PlayerPage() {
       <div className="text-center">
         <h1 className="text-2xl font-serif font-bold">{current.title}</h1>
         <p className="text-muted mt-2">{current.description ?? 'X-Relax'}</p>
+        <p className="text-sm text-muted mt-2">
+          {formatPlayCount(stats.plays)}
+          {ratingLine ? ` · ${ratingLine}` : ''}
+        </p>
         {queue.length > 1 ? (
-          <p className="text-sm text-muted mt-2">Track {queueIndex + 1} of {queue.length}</p>
+          <p className="text-sm text-muted mt-2">
+            {queueLabel ? `${queueLabel} · ` : ''}Track {queueIndex + 1} of {queue.length}
+          </p>
         ) : null}
       </div>
       <div className="h-1 rounded bg-border overflow-hidden">
@@ -149,18 +156,20 @@ export default function PlayerPage() {
           </button>
         ) : (
           <Link href="/premium" className="card block p-3 text-sm text-muted">
-            Premium only · download sounds to listen without internet
+            Premium only · free accounts cannot download for offline
           </Link>
         )}
       </div>
-      <div>
-        <p className="text-xs uppercase tracking-wider text-muted mb-2">Rate</p>
-        <div className="flex gap-2">
-          {[1, 2, 3, 4, 5].map((s) => (
-            <button key={s} type="button" className="chip" onClick={() => void rateSound(s)}>★{s}</button>
-          ))}
-        </div>
-      </div>
+      <SoundRatingPanel
+        sound={current}
+        onSoundUpdated={(next) =>
+          setStats((s) => ({
+            ...s,
+            avg: Number(next.average_rating ?? 0),
+            count: Number(next.rating_count ?? 0),
+          }))
+        }
+      />
     </div>
   );
 }

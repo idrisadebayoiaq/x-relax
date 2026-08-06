@@ -19,32 +19,34 @@ import { IconButton } from '../../ui/Icon';
 import type { Sound } from '../../types/database';
 import type { RootStackParamList } from '../../navigation/types';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'PlaylistDetail'>;
+type Props = NativeStackScreenProps<RootStackParamList, 'CategoryDetail'>;
 
-export function PlaylistDetailScreen() {
+export function CategoryDetailScreen() {
   const { colors, isDark } = useAppTheme();
   const insets = useSafeAreaInsets();
   const route = useRoute<Props['route']>();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { playSound } = usePlayer();
-  const [title, setTitle] = useState('Playlist');
+  const [title, setTitle] = useState(route.params.name || 'Category');
   const [sounds, setSounds] = useState<Sound[]>([]);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
-    const playlistId = route.params.playlistId;
-    const [{ data: pl }, { data: items }] = await Promise.all([
-      supabase.from('playlists').select('title').eq('id', playlistId).maybeSingle(),
+    const categoryId = route.params.categoryId;
+    const [{ data: cat }, { data: items }] = await Promise.all([
+      supabase.from('categories').select('name').eq('id', categoryId).maybeSingle(),
       supabase
-        .from('playlist_items')
-        .select('position, sound:sounds(*)')
-        .eq('playlist_id', playlistId)
-        .order('position', { ascending: true }),
+        .from('sound_categories')
+        .select('sound:sounds(*)')
+        .eq('category_id', categoryId),
     ]);
-    setTitle(pl?.title ?? 'Playlist');
-    setSounds(((items as any[]) ?? []).map((i) => i.sound).filter(Boolean));
+    setTitle(cat?.name ?? route.params.name ?? 'Category');
+    const list = ((items as { sound: Sound | Sound[] | null }[]) ?? [])
+      .map((i) => (Array.isArray(i.sound) ? i.sound[0] : i.sound))
+      .filter((s): s is Sound => !!s && s.status === 'published');
+    setSounds(list);
     setLoading(false);
-  }, [route.params.playlistId]);
+  }, [route.params.categoryId, route.params.name]);
 
   useFocusEffect(
     useCallback(() => {
@@ -70,7 +72,7 @@ export function PlaylistDetailScreen() {
         <Text style={[styles.sub, { color: colors.textMuted }]}>
           {loading
             ? 'Loading…'
-            : `${sounds.length} sound${sounds.length === 1 ? '' : 's'} · plays only this playlist until finished`}
+            : `${sounds.length} sound${sounds.length === 1 ? '' : 's'} · plays only this category until finished`}
         </Text>
       </View>
 
@@ -82,10 +84,7 @@ export function PlaylistDetailScreen() {
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 40 }}
           ListEmptyComponent={
-            <EmptyBlock
-              title="Empty playlist"
-              body="Open a sound in the player and add it from Actions → Playlist."
-            />
+            <EmptyBlock title="Empty category" body="No published sounds here yet." />
           }
           renderItem={({ item }) => (
             <SoundCard

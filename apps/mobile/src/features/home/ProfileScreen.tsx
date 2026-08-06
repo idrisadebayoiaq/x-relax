@@ -51,20 +51,25 @@ export function ProfileScreen() {
   }, [profile?.display_name, profile?.avatar_url]);
 
   const loadCreator = useCallback(async () => {
-    if (!user || !isCreator) return;
+    if (!user || !isCreator) {
+      setIsVerifiedCreator(false);
+      return;
+    }
     const { data } = await supabase
       .from('creator_profiles')
-      .select('is_verified')
+      .select('is_verified, can_earn')
       .eq('user_id', user.id)
       .maybeSingle();
-    setIsVerifiedCreator(!!data?.is_verified);
+    setIsVerifiedCreator(!!data?.is_verified || !!data?.can_earn);
   }, [user, isCreator]);
 
   useEffect(() => {
     loadCreator();
   }, [loadCreator]);
 
-  const showVerifiedBadge = isPremium || isAdmin || isVerifiedCreator;
+  const showWhiteBadge = isPremium;
+  const showBlueBadge =
+    isVerifiedCreator || !!adminProfile?.has_verified_badge || adminProfile?.role === 'super';
 
   const pickAvatar = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -125,7 +130,8 @@ export function ProfileScreen() {
           <Text style={[styles.name, { color: colors.text }]}>
             {profile?.display_name ?? 'Listener'}
           </Text>
-          {showVerifiedBadge ? <VerifiedBadge size={18} /> : null}
+          {showWhiteBadge ? <VerifiedBadge size={18} tone="white" /> : null}
+          {showBlueBadge ? <VerifiedBadge size={18} tone="blue" /> : null}
         </View>
         <Text style={[styles.email, { color: colors.textMuted }]}>{user?.email ?? '—'}</Text>
         <View style={styles.badgeRow}>
@@ -133,6 +139,9 @@ export function ProfileScreen() {
           <Badge label={isPremium ? 'premium' : 'free'} colors={colors} />
           {adminProfile ? <Badge label={`admin · ${adminProfile.role}`} colors={colors} /> : null}
           {isVerifiedCreator ? <Badge label="verified creator" colors={colors} /> : null}
+          {adminProfile?.has_verified_badge || adminProfile?.role === 'super' ? (
+            <Badge label="verified admin" colors={colors} />
+          ) : null}
         </View>
       </View>
 

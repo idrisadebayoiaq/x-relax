@@ -21,6 +21,7 @@ type Row = {
   user_id: string;
   status: string;
   document_path: string | null;
+  document_type: string | null;
   note: string | null;
   created_at: string;
 };
@@ -36,7 +37,7 @@ export function AdminVerificationsScreen() {
   const load = useCallback(async () => {
     const { data } = await supabase
       .from('creator_verifications')
-      .select('id, user_id, status, document_path, note, created_at')
+      .select('id, user_id, status, document_path, document_type, note, created_at')
       .eq('status', 'pending')
       .order('created_at', { ascending: true });
     setRows((data as Row[]) ?? []);
@@ -53,7 +54,8 @@ export function AdminVerificationsScreen() {
     const { error } = await supabase.rpc('review_creator_verification', {
       p_id: id,
       p_status: status,
-      p_admin_note: status === 'approved' ? 'Welcome to verified creators' : 'Requirements not met',
+      p_admin_note:
+        status === 'approved' ? 'Earning approved' : 'Earning application rejected',
     });
     if (error) Alert.alert('Failed', error.message);
     else load();
@@ -77,8 +79,10 @@ export function AdminVerificationsScreen() {
         <Pressable onPress={() => navigation.goBack()} hitSlop={10}>
           <Text style={[styles.back, { color: colors.textMuted }]}>‹ Back</Text>
         </Pressable>
-        <Text style={[styles.title, { color: colors.text }]}>Verifications</Text>
-        <Text style={[styles.sub, { color: colors.textMuted }]}>Pending creator ID reviews</Text>
+        <Text style={[styles.title, { color: colors.text }]}>Earning apps</Text>
+        <Text style={[styles.sub, { color: colors.textMuted }]}>
+          Identity reviews for creators applying to earn
+        </Text>
       </View>
 
       {loading ? (
@@ -89,7 +93,7 @@ export function AdminVerificationsScreen() {
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 40 }}
           ListEmptyComponent={
-            <EmptyBlock title="Queue clear" body="No pending verifications." />
+            <EmptyBlock title="Queue clear" body="No pending earning applications." />
           }
           ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
           renderItem={({ item }) => (
@@ -98,7 +102,8 @@ export function AdminVerificationsScreen() {
                 User {item.user_id.slice(0, 8)}…
               </Text>
               <Text style={[styles.rowMeta, { color: colors.textMuted }]}>
-                {item.note ?? 'No note'}
+                {(item.document_type ?? 'ID').replaceAll('_', ' ')}
+                {item.note ? ` · ${item.note}` : ''}
               </Text>
               <View style={styles.actions}>
                 <Pressable onPress={() => review(item.id, 'approved')}>

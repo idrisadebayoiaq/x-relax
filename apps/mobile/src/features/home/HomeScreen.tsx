@@ -47,9 +47,11 @@ type CategoryRow = {
 };
 
 const CATALOG_SLUGS = new Set([
+  'bell',
   'birds',
   'fireplace',
   'forest',
+  'healing',
   'meditation',
   'mixes',
   'ocean',
@@ -95,6 +97,7 @@ export function HomeScreen() {
         { data: history },
         { data: dailySetting },
         { data: recommendedSetting },
+        { data: categoryLinks },
       ] =
         await Promise.all([
           supabase
@@ -125,6 +128,7 @@ export function HomeScreen() {
             .select('value')
             .eq('key', 'recommended_sound_ids')
             .maybeSingle(),
+          supabase.from('sound_categories').select('sound_id, category_id'),
         ]);
 
       if (soundsErr) throw new Error(soundsErr.message);
@@ -156,6 +160,19 @@ export function HomeScreen() {
           ? fromIds
           : trending.slice(0, 12);
 
+      const catRows = (cats as CategoryRow[]) ?? [];
+      const slugByCatId = new Map(catRows.map((c) => [c.id, c.slug]));
+      const bySlug = new Map<string, Sound[]>();
+      for (const row of (categoryLinks as { sound_id: string; category_id: string }[]) ?? []) {
+        const slug = slugByCatId.get(row.category_id);
+        if (slug !== 'bell' && slug !== 'healing') continue;
+        const sound = all.find((s) => s.id === row.sound_id);
+        if (!sound) continue;
+        const list = bySlug.get(slug) ?? [];
+        list.push(sound);
+        bySlug.set(slug, list);
+      }
+
       const dailySound =
         (dailyPickId ? all.find((s) => s.id === dailyPickId) : undefined) ??
         featured[0] ??
@@ -165,7 +182,7 @@ export function HomeScreen() {
 
       setDaily(dailySound);
 
-      const browseCats = ((cats as CategoryRow[]) ?? []).filter(
+      const browseCats = catRows.filter(
         (c) => CATALOG_SLUGS.has(c.slug) || Boolean(c.cover_url) || Boolean(c.created_by),
       );
 
@@ -184,6 +201,20 @@ export function HomeScreen() {
             subtitle: 'Curated calm',
             data: featured.slice(0, 12),
             icon: 'star-outline',
+          },
+          {
+            key: 'bell',
+            title: 'Bell',
+            subtitle: 'Temple bells and chimes for focus and wind-down',
+            data: (bySlug.get('bell') ?? []).slice(0, 12),
+            icon: 'notifications-outline',
+          },
+          {
+            key: 'healing',
+            title: 'Healing',
+            subtitle: 'Singing bowls and sound baths for deep rest',
+            data: (bySlug.get('healing') ?? []).slice(0, 12),
+            icon: 'leaf-outline',
           },
           {
             key: 'recommended',
@@ -245,12 +276,13 @@ export function HomeScreen() {
     return items;
   }, [sections]);
 
-  const openSound = async (sound: Sound, queue?: Sound[]) => {
-    const playableQueue = queue ?? catalogSounds.length ? catalogSounds : [sound];
+  const openSound = async (sound: Sound, queue?: Sound[], queueLabel?: string) => {
+    const playableQueue = queue ?? (catalogSounds.length ? catalogSounds : [sound]);
     const index = playableQueue.findIndex((item) => item.id === sound.id);
     const started = await playSound(sound, {
       queue: playableQueue,
       queueIndex: index >= 0 ? index : 0,
+      queueLabel: queueLabel ?? (queue ? undefined : 'Catalog'),
     });
     if (!started) return;
     if (!hasUnlimitedListening) {
@@ -322,8 +354,8 @@ export function HomeScreen() {
             </Text>
             <Text style={[styles.limitBody, { color: colors.textMuted }]}>
               {dailyPlays.remaining > 0
-                ? 'Free plan · normal track length · no sleep timer'
-                : 'Upgrade to Premium for unlimited listening and sleep timer.'}
+                ? `Free plan · unlock ${dailyPlays.limit} sounds/day · replay those freely`
+                : 'You can still replay today’s unlocked sounds. Upgrade to Premium for unlimited listening.'}
             </Text>
           </View>
         ) : null}
@@ -336,7 +368,7 @@ export function HomeScreen() {
                 <Text style={[styles.hello, { color: colors.textMuted }]}>
                   Good {greetingHour()}, {firstName}
                 </Text>
-                {isPremium ? <VerifiedBadge size={14} /> : null}
+                {isPremium ? <VerifiedBadge size={14} tone="white" /> : null}
               </View>
             </View>
             <View style={styles.topActions}>
@@ -373,7 +405,16 @@ export function HomeScreen() {
           }}
         >
           {daily ? (
-            <Pressable onPress={() => openSound(daily, daily ? [daily, ...catalogSounds.filter((s) => s.id !== daily.id)] : undefined)} style={styles.heroPress}>
+            <Pressable
+              onPress={() =>
+                openSound(
+                  daily,
+                  daily ? [daily, ...catalogSounds.filter((s) => s.id !== daily.id)] : undefined,
+                  "Today's pick",
+                )
+              }
+              style={styles.heroPress}
+            >
               <View style={[styles.hero, { height: HERO_H }]}>
                 {daily.cover_url ? (
                   <CoverArt
@@ -456,7 +497,12 @@ export function HomeScreen() {
                   name={c.name}
                   slug={c.slug}
                   coverUrl={c.cover_url}
-                  onPress={() => openSearch(c.name)}
+                  onPress={() =>
+                    navigation.navigate('CategoryDetail', {
+                      categoryId: c.id,
+                      name: c.name,
+                    })
+                  }
                 />
               ))
             ) : (
@@ -496,7 +542,7 @@ export function HomeScreen() {
                   key={`${section.key}-${item.id}`}
                   sound={item}
                   compact
-                  onPress={() => openSound(item, section.data)}
+                  onPress={() => openSound(item, section.data, section.title)}
                 />
               ))}
             </ScrollView>

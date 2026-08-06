@@ -41,7 +41,7 @@ export default function AdminOverviewPage() {
       setCards([
         { href: '/admin/payments', label: 'Pending payments', value: pendingPayments },
         { href: '/admin/moderation', label: 'Sounds to moderate', value: pendingSounds },
-        { href: '/admin/verifications', label: 'Verifications', value: pendingVerifications },
+        { href: '/admin/verifications', label: 'Earning apps', value: pendingVerifications },
         { href: '/admin/withdrawals', label: 'Withdrawals', value: pendingWithdrawals },
         { href: '/admin/reports', label: 'Open reports', value: openReports },
         { href: '/admin/support', label: 'Open support', value: openSupport },

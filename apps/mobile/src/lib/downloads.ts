@@ -7,6 +7,14 @@ export async function downloadSoundForOffline(
   userId: string,
   sound: Sound,
 ): Promise<{ ok: boolean; message: string }> {
+  const { data: allowed, error: gateError } = await supabase.rpc('user_can_download_offline', {
+    uid: userId,
+  });
+  if (gateError) return { ok: false, message: gateError.message };
+  if (!allowed) {
+    return { ok: false, message: 'Offline downloads require Premium or admin access.' };
+  }
+
   if (!sound.audio_url) {
     return { ok: false, message: 'No audio URL for this sound' };
   }

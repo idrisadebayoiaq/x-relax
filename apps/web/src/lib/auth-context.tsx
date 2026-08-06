@@ -68,10 +68,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const { data: admin } = await supabase
         .from('admin_profiles')
-        .select('user_id, role')
+        .select('user_id, role, has_verified_badge')
         .eq('user_id', user.id)
         .maybeSingle();
-      setAdminProfile((admin as AdminProfile) ?? null);
+      const adminRow = (admin as AdminProfile) ?? null;
+      setAdminProfile(
+        adminRow
+          ? {
+              ...adminRow,
+              has_verified_badge: !!adminRow.has_verified_badge || adminRow.role === 'super',
+            }
+          : null,
+      );
 
       const { data: premium } = await supabase.rpc('user_has_premium', { uid: user.id });
       setIsPremium(!!premium);
@@ -192,7 +200,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isAdmin = profile?.role === 'admin' || !!adminProfile;
   const isCreator = profile?.role === 'creator' || isAdmin;
   const hasPremiumAccess = isPremium || isCreator || isAdmin;
-  const hasUnlimitedListening = hasPremiumAccess;
+  const hasUnlimitedListening = isPremium || isAdmin;
   const canUseMixes = isPremium || isAdmin;
   const canDownloadOffline = isPremium || isAdmin;
 

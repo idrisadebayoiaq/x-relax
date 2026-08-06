@@ -2,10 +2,20 @@ import { createClient } from '@/lib/supabase/client';
 import { removeOfflineSound, saveOfflineSound } from '@/lib/offline-storage';
 import type { Sound } from '@/types/database';
 
+async function assertCanDownload(userId: string): Promise<string | null> {
+  const { data, error } = await createClient().rpc('user_can_download_offline', { uid: userId });
+  if (error) return error.message;
+  if (!data) return 'Offline downloads require Premium or admin access.';
+  return null;
+}
+
 export async function downloadSoundForWeb(
   userId: string,
   sound: Sound,
 ): Promise<{ ok: boolean; message: string }> {
+  const gate = await assertCanDownload(userId);
+  if (gate) return { ok: false, message: gate };
+
   if (!sound.audio_url) {
     return { ok: false, message: 'No audio URL for this sound' };
   }

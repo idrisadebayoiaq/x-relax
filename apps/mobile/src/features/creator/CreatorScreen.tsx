@@ -151,14 +151,14 @@ export function CreatorScreen() {
         onPress={() => navigation.navigate('CreatorSounds')}
       />
       <OutlineRow
-        label="Verification"
-        hint="Unlock verified creator status"
+        label="Apply to earn"
+        hint="Requirements, identity verify, admin approval"
         icon="shield-checkmark-outline"
         onPress={() => navigation.navigate('CreatorVerification')}
       />
       <OutlineRow
         label="Earnings & withdrawals"
-        hint="History and payout requests"
+        hint="Requires approved Apply to Earn"
         icon="wallet-outline"
         onPress={() => navigation.navigate('CreatorWithdrawals')}
       />

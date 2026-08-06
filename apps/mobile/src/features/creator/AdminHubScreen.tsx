@@ -37,8 +37,8 @@ export function AdminHubScreen() {
         onPress={() => navigation.navigate('AdminModeration')}
       />
       <OutlineRow
-        label="Creator verifications"
-        hint="Review verification requests"
+        label="Earning applications"
+        hint="Review identity & apply-to-earn requests"
         icon="people-outline"
         onPress={() => navigation.navigate('AdminVerifications')}
       />

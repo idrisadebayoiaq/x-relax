@@ -13,6 +13,9 @@ type MethodInfo = {
   account_name: string;
   bank_name: string;
   account_number: string;
+  account_type?: string;
+  routing_number?: string;
+  bank_address?: string;
 };
 
 export default function CheckoutPage() {
@@ -87,6 +90,11 @@ export default function CheckoutPage() {
       sender_id: user.id,
       body: 'Payment proof uploaded. Please review.',
     });
+    await supabase.rpc('notify_admins', {
+      p_title: 'New payment request',
+      p_body: `${user.email ?? 'User'} submitted a ${plan.name} payment`,
+      p_data: { payment_id: payment.id },
+    });
 
     setBusy(false);
     router.push('/premium/payments');
@@ -95,29 +103,54 @@ export default function CheckoutPage() {
   if (!plan) return <p className="text-muted">Loading plan…</p>;
 
   const info = methods[method];
+  const amountLabel =
+    info?.currency === 'USD' || method === 'usd_lead_bank'
+      ? `$${Number(plan.price_usd).toFixed(2)}`
+      : `₦${Number(plan.price_ngn).toLocaleString()}`;
 
   return (
     <div className="max-w-xl mx-auto space-y-6">
-      <Link href="/premium" className="text-sm text-muted underline">← Premium</Link>
+      <Link href={plan.code === 'creator_blue_badge' ? '/creator' : '/premium'} className="text-sm text-muted underline">
+        ← Back
+      </Link>
       <h1 className="text-3xl font-serif font-bold">{plan.name}</h1>
       <form onSubmit={submit} className="card p-6 space-y-4">
         {error ? <p className="text-sm text-red-600">{error}</p> : null}
         <div className="flex gap-2">
           {(['ngn_opay', 'usd_lead_bank'] as PaymentMethod[]).map((m) => (
-            <button key={m} type="button" className={`chip ${method === m ? 'chip-active' : ''}`} onClick={() => setMethod(m)}>
+            <button
+              key={m}
+              type="button"
+              className={`chip ${method === m ? 'chip-active' : ''}`}
+              onClick={() => setMethod(m)}
+            >
               {m === 'ngn_opay' ? 'NGN · Opay' : 'USD · Bank'}
             </button>
           ))}
         </div>
         {info ? (
-          <div className="text-sm space-y-1 text-muted">
-            <p>{info.label}</p>
-            <p>{info.account_name} · {info.bank_name}</p>
-            <p>{info.account_number}</p>
+          <div className="rounded-2xl border border-border p-4 space-y-2 text-sm">
+            <p className="font-semibold text-foreground">{info.label}</p>
+            <p className="text-2xl font-serif font-bold">{amountLabel}</p>
+            <p className="text-muted">Account name: {info.account_name}</p>
+            <p className="text-muted">Bank: {info.bank_name}</p>
+            <p className="text-muted">Account number: {info.account_number}</p>
+            {info.routing_number ? (
+              <p className="text-muted">Routing: {info.routing_number}</p>
+            ) : null}
+            {info.account_type ? <p className="text-muted">Type: {info.account_type}</p> : null}
+            {info.bank_address ? <p className="text-muted">Address: {info.bank_address}</p> : null}
+            <p className="text-muted pt-2">
+              Include your X-Relax email in the transfer memo if possible.
+            </p>
           </div>
-        ) : null}
+        ) : (
+          <p className="text-sm text-red-600">
+            Payment details for this method are missing. Ask an admin to update Settings → payment_methods.
+          </p>
+        )}
         <input type="file" accept="image/*" onChange={(e) => setProof(e.target.files?.[0] ?? null)} />
-        <button type="submit" className="btn btn-primary w-full" disabled={busy}>
+        <button type="submit" className="btn btn-primary w-full" disabled={busy || !info}>
           {busy ? 'Submitting…' : 'Submit payment proof'}
         </button>
       </form>

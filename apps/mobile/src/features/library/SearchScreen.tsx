@@ -152,7 +152,11 @@ export function SearchScreen() {
               sound={item}
               onPress={async () => {
                 const index = filtered.findIndex((s) => s.id === item.id);
-                const started = await playSound(item, { queue: filtered, queueIndex: index });
+                const started = await playSound(item, {
+                  queue: filtered,
+                  queueIndex: index,
+                  queueLabel: 'Search results',
+                });
                 if (started) navigation.navigate('Player', { soundId: item.id });
               }}
             />

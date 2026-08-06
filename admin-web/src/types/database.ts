@@ -20,5 +20,6 @@ export type AdminListRow = {
   email: string;
   display_name: string | null;
   admin_role: AdminRole;
+  has_verified_badge?: boolean;
   created_at: string;
 };

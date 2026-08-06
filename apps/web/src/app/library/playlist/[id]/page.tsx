@@ -39,7 +39,11 @@ export default function PlaylistDetailPage() {
 
   const open = async (sound: Sound) => {
     const index = sounds.findIndex((s) => s.id === sound.id);
-    const started = await playSound(sound, { queue: sounds, queueIndex: index });
+    const started = await playSound(sound, {
+      queue: sounds,
+      queueIndex: index,
+      queueLabel: title || 'Playlist',
+    });
     if (started) router.push('/player');
   };
 
@@ -47,7 +51,11 @@ export default function PlaylistDetailPage() {
     <div className="max-w-4xl mx-auto space-y-6">
       <Link href="/library" className="text-sm text-muted underline">← Library</Link>
       <h1 className="text-3xl font-serif font-bold">{title}</h1>
-      <p className="text-muted">{loading ? 'Loading…' : `${sounds.length} sounds`}</p>
+      <p className="text-muted">
+        {loading
+          ? 'Loading…'
+          : `${sounds.length} sounds · plays only this playlist until finished`}
+      </p>
       <div className="grid gap-3">
         {sounds.map((sound) => (
           <SoundCard key={sound.id} sound={sound} onPlay={() => void open(sound)} />

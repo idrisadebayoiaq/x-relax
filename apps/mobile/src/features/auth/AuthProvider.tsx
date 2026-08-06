@@ -69,12 +69,17 @@ async function fetchProfile(userId: string): Promise<Profile | null> {
 async function fetchAdminProfile(userId: string): Promise<AdminProfile | null> {
   const { data, error } = await supabase
     .from('admin_profiles')
-    .select('user_id, role')
+    .select('user_id, role, has_verified_badge')
     .eq('user_id', userId)
     .maybeSingle();
 
   if (error) return null;
-  return data as AdminProfile | null;
+  const row = data as AdminProfile | null;
+  if (!row) return null;
+  return {
+    ...row,
+    has_verified_badge: !!row.has_verified_badge || row.role === 'super',
+  };
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -268,7 +273,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isAdmin = profile?.role === 'admin' || !!adminProfile;
   const isCreator = profile?.role === 'creator' || isAdmin;
   const hasPremiumAccess = isPremium || isCreator || isAdmin;
-  const hasUnlimitedListening = hasPremiumAccess;
+  const hasUnlimitedListening = isPremium || isAdmin;
   const canUseMixes = isPremium || isAdmin;
   const canDownloadOffline = isPremium || isAdmin;
 

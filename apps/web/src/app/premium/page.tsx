@@ -17,7 +17,9 @@ export default function PremiumPage() {
       .select('*')
       .eq('is_active', true)
       .order('sort_order')
-      .then(({ data }) => setPlans((data as SubscriptionPlan[]) ?? []));
+      .then(({ data }) =>
+        setPlans(((data as SubscriptionPlan[]) ?? []).filter((p) => p.code !== 'creator_blue_badge')),
+      );
   }, []);
 
   return (
@@ -34,7 +36,7 @@ export default function PremiumPage() {
       {!isPremium ? (
         <div className="card p-5 space-y-2">
           <p className="font-semibold">Free plan</p>
-          <p className="text-sm text-muted whitespace-pre-line">{`· ${FREE_DAILY_SOUND_LIMIT} different sounds per day\n· Normal track length (no sleep timer)\n· Mix Studio locked\n· No offline downloads — internet required\n· Browse, search, and favourites`}</p>
+          <p className="text-sm text-muted whitespace-pre-line">{`· Unlock ${FREE_DAILY_SOUND_LIMIT} different sounds per day\n· Unlimited replays of those ${FREE_DAILY_SOUND_LIMIT} the same day\n· No other sounds until tomorrow\n· Mix Studio locked\n· No offline downloads — internet required`}</p>
         </div>
       ) : null}
 
@@ -58,9 +60,9 @@ export default function PremiumPage() {
       </div>
 
       {!hasPremiumAccess ? (
-        <p className="text-sm text-muted">
-          Creators get unlimited listening and uploads. Mix Studio and offline downloads are Premium or admin only.
-        </p>
+          <p className="text-sm text-muted">
+            Premium unlocks unlimited listening, sleep timer, Mix Studio, and offline downloads. Admins get the same listening unlocks.
+          </p>
       ) : null}
     </div>
   );

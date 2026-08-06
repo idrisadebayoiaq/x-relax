@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 
@@ -17,7 +17,20 @@ export function AnnouncementForm() {
   const [body, setBody] = useState('');
   const [audience, setAudience] = useState<(typeof AUDIENCES)[number]['value']>('all');
   const [message, setMessage] = useState<string | null>(null);
+  const [verified, setVerified] = useState(true);
   const [pending, start] = useTransition();
+
+  useEffect(() => {
+    (async () => {
+      const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase.rpc('admin_has_verified_badge', { uid: user.id });
+      setVerified(!!data);
+    })();
+  }, []);
 
   return (
     <form
@@ -25,6 +38,12 @@ export function AnnouncementForm() {
       onSubmit={(e) => {
         e.preventDefault();
         start(async () => {
+          if (!verified) {
+            const ok = confirm(
+              'Warning: your admin account is not blue-verified. Recipients will see a warning. Continue?',
+            );
+            if (!ok) return;
+          }
           setMessage(null);
           const supabase = createClient();
           const { data, error } = await supabase.rpc('admin_broadcast_announcement', {
@@ -44,6 +63,12 @@ export function AnnouncementForm() {
         });
       }}
     >
+      {!verified ? (
+        <div className="border border-amber-500/40 bg-amber-500/5 rounded-xl p-3 text-sm">
+          Unverified admin — announcements will show a warning to users until a super admin grants
+          your blue badge.
+        </div>
+      ) : null}
       <div>
         <label className="block text-sm text-muted mb-1">Audience</label>
         <select
@@ -87,10 +112,6 @@ export function AnnouncementForm() {
         {pending ? 'Sending…' : 'Send announcement'}
       </button>
       {message ? <p className="text-sm text-muted">{message}</p> : null}
-      <p className="text-xs text-muted">
-        Creates in-app notifications; FCM is dispatched automatically when devices have registered
-        tokens (dev/preview build required — not Expo Go).
-      </p>
     </form>
   );
 }

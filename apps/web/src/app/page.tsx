@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { CoverArt } from '@/components/CoverArt';
@@ -10,13 +10,14 @@ import { getDailyPlayStatus, FREE_DAILY_SOUND_LIMIT } from '@/lib/daily-listen-l
 import { moodPaletteFor } from '@/lib/format';
 import { useAuth } from '@/lib/auth-context';
 import { usePlayer } from '@/lib/player-context';
-import type { Sound } from '@/types/database';
+import type { Category, Sound } from '@/types/database';
 
 export default function HomePage() {
   const router = useRouter();
   const { user, isPremium, hasUnlimitedListening } = useAuth();
   const { playSound } = usePlayer();
   const [sections, setSections] = useState<CatalogSection[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [daily, setDaily] = useState<Sound | null>(null);
   const [catalog, setCatalog] = useState<Sound[]>([]);
   const [loading, setLoading] = useState(true);
@@ -24,10 +25,11 @@ export default function HomePage() {
 
   useEffect(() => {
     loadHomeCatalog(user?.id)
-      .then(({ all, daily: pick, sections: secs }) => {
+      .then(({ all, daily: pick, sections: secs, categories: cats }) => {
         setCatalog(all);
         setDaily(pick);
         setSections(secs);
+        setCategories(cats);
       })
       .finally(() => setLoading(false));
   }, [user?.id]);
@@ -42,10 +44,14 @@ export default function HomePage() {
     );
   }, [user?.id, hasUnlimitedListening]);
 
-  const openSound = async (sound: Sound, queue?: Sound[]) => {
+  const openSound = async (sound: Sound, queue?: Sound[], queueLabel?: string) => {
     const playableQueue = queue ?? catalog;
     const index = playableQueue.findIndex((s) => s.id === sound.id);
-    const started = await playSound(sound, { queue: playableQueue, queueIndex: index >= 0 ? index : 0 });
+    const started = await playSound(sound, {
+      queue: playableQueue,
+      queueIndex: index >= 0 ? index : 0,
+      queueLabel: queueLabel ?? (queue ? 'Queue' : 'Catalog'),
+    });
     if (started) router.push('/player');
   };
 
@@ -64,12 +70,8 @@ export default function HomePage() {
         </div>
         <div className="flex gap-2">
           {isPremium ? <span className="chip chip-active">Premium</span> : null}
-          <Link href="/search" className="chip">
-            Search
-          </Link>
-          <Link href="/notifications" className="chip">
-            Alerts
-          </Link>
+          <Link href="/search" className="chip">Search</Link>
+          <Link href="/notifications" className="chip">Alerts</Link>
         </div>
       </div>
 
@@ -81,10 +83,8 @@ export default function HomePage() {
               : 'Daily limit reached'}
           </p>
           <p className="text-sm text-muted mt-1">
-            Free plan · normal track length · no sleep timer.{' '}
-            <Link href="/premium" className="underline">
-              Upgrade
-            </Link>
+            Free plan · unlock {FREE_DAILY_SOUND_LIMIT} sounds/day · replay those freely.{' '}
+            <Link href="/premium" className="underline">Upgrade for unlimited</Link>
           </p>
         </div>
       ) : null}
@@ -92,7 +92,9 @@ export default function HomePage() {
       {daily ? (
         <button
           type="button"
-          onClick={() => void openSound(daily, [daily, ...catalog.filter((s) => s.id !== daily.id)])}
+          onClick={() =>
+            void openSound(daily, [daily, ...catalog.filter((s) => s.id !== daily.id)], "Today's pick")
+          }
           className="w-full text-left overflow-hidden rounded-3xl min-h-[280px] relative"
           style={{ background: `linear-gradient(135deg, ${heroColors[0]}, ${heroColors[1]})` }}
         >
@@ -111,6 +113,34 @@ export default function HomePage() {
         </button>
       ) : null}
 
+      {categories.length ? (
+        <section>
+          <div className="mb-4">
+            <h3 className="text-xl font-semibold">Browse moods</h3>
+            <p className="text-sm text-muted">Open a category to play only those sounds</p>
+          </div>
+          <div className="flex gap-4 overflow-x-auto pb-2">
+            {categories.map((c) => {
+              const [a, b] = moodPaletteFor(c.slug || c.name);
+              return (
+                <Link key={c.id} href={`/category/${c.id}`} className="min-w-[88px] text-center">
+                  <div
+                    className="w-[76px] h-[76px] rounded-full mx-auto overflow-hidden"
+                    style={{ background: `linear-gradient(135deg, ${a}, ${b})` }}
+                  >
+                    {c.cover_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={c.cover_url} alt="" className="w-full h-full object-cover" />
+                    ) : null}
+                  </div>
+                  <p className="text-sm mt-2 truncate">{c.name}</p>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
+
       {sections.map((section) => (
         <section key={section.key}>
           <div className="mb-4">
@@ -123,7 +153,7 @@ export default function HomePage() {
                 key={`${section.key}-${sound.id}`}
                 sound={sound}
                 compact
-                onPlay={() => void openSound(sound, section.data)}
+                onPlay={() => void openSound(sound, section.data, section.title)}
               />
             ))}
           </div>

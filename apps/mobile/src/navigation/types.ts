@@ -17,6 +17,7 @@ export type RootStackParamList = {
   Tabs: { screen?: keyof MainTabParamList } | undefined;
   Player: { soundId: string };
   PlaylistDetail: { playlistId: string };
+  CategoryDetail: { categoryId: string; name: string };
   PaymentCheckout: { planId: string };
   MyPayments: undefined;
   AdminPayments: undefined;

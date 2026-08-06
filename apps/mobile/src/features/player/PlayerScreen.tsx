@@ -1,11 +1,20 @@
-import { useEffect, useState } from 'react';
-import { Alert, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import {
+  Alert,
+  Pressable,
+  ScrollView,
+  Share,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAppTheme } from '../../lib/useAppTheme';
-import { moodPaletteFor } from '../../lib/format';
+import { formatPlayCount, formatRatingSummary, moodPaletteFor } from '../../lib/format';
 import { usePlayer } from './PlayerProvider';
 import { useAuth } from '../auth/AuthProvider';
 import { supabase } from '../../lib/supabase';
@@ -13,6 +22,15 @@ import { CoverArt } from '../home/CoverArt';
 import type { RootStackParamList } from '../../navigation/types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Player'>;
+
+type ReviewRow = {
+  id: string;
+  body: string;
+  created_at: string;
+  user_id: string;
+  profile?: { display_name: string | null } | null;
+  score?: number | null;
+};
 
 function formatSleepRemaining(totalSec: number) {
   const m = Math.floor(totalSec / 60);
@@ -41,6 +59,7 @@ export function PlayerScreen({ navigation }: Props) {
     sleepEndsAt,
     queue,
     queueIndex,
+    queueLabel,
     hasNext,
     hasPrevious,
     togglePlay,
@@ -55,11 +74,94 @@ export function PlayerScreen({ navigation }: Props) {
   } = usePlayer();
 
   const [sleepTick, setSleepTick] = useState(0);
+  const [avg, setAvg] = useState(0);
+  const [ratingCount, setRatingCount] = useState(0);
+  const [playCount, setPlayCount] = useState(0);
+  const [myScore, setMyScore] = useState(0);
+  const [comment, setComment] = useState('');
+  const [reviews, setReviews] = useState<ReviewRow[]>([]);
+  const [ratingBusy, setRatingBusy] = useState(false);
+
   useEffect(() => {
     if (!sleepEndsAt) return;
     const id = setInterval(() => setSleepTick((t) => t + 1), 1000);
     return () => clearInterval(id);
   }, [sleepEndsAt]);
+
+  useEffect(() => {
+    if (!current) return;
+    setAvg(Number(current.average_rating ?? 0));
+    setRatingCount(Number(current.rating_count ?? 0));
+    setPlayCount(Number(current.play_count ?? 0));
+  }, [current?.id, current?.average_rating, current?.rating_count, current?.play_count]);
+
+  const loadRatings = useCallback(async () => {
+    if (!current) return;
+    const [{ data: rating }, { data: myReview }, { data: reviewRows }, { data: fresh }] =
+      await Promise.all([
+        user
+          ? supabase
+              .from('ratings')
+              .select('score')
+              .eq('user_id', user.id)
+              .eq('sound_id', current.id)
+              .maybeSingle()
+          : Promise.resolve({ data: null }),
+        user
+          ? supabase
+              .from('reviews')
+              .select('body')
+              .eq('user_id', user.id)
+              .eq('sound_id', current.id)
+              .maybeSingle()
+          : Promise.resolve({ data: null }),
+        supabase
+          .from('reviews')
+          .select('id, body, created_at, user_id, profile:profiles(display_name)')
+          .eq('sound_id', current.id)
+          .order('created_at', { ascending: false })
+          .limit(20),
+        supabase
+          .from('sounds')
+          .select('average_rating, rating_count, play_count')
+          .eq('id', current.id)
+          .maybeSingle(),
+      ]);
+
+    setMyScore(Number((rating as { score?: number } | null)?.score ?? 0));
+    setComment((myReview as { body?: string } | null)?.body ?? '');
+    if (fresh) {
+      setAvg(Number(fresh.average_rating ?? 0));
+      setRatingCount(Number(fresh.rating_count ?? 0));
+      setPlayCount(Number(fresh.play_count ?? 0));
+    }
+
+    const normalized = ((reviewRows ?? []) as unknown as ReviewRow[]).map((row) => ({
+      ...row,
+      profile: Array.isArray(row.profile) ? row.profile[0] : row.profile,
+    }));
+
+    if (normalized.length) {
+      const { data: scores } = await supabase
+        .from('ratings')
+        .select('user_id, score')
+        .eq('sound_id', current.id)
+        .in(
+          'user_id',
+          normalized.map((r) => r.user_id),
+        );
+      const scoreMap = new Map(
+        ((scores as { user_id: string; score: number }[]) ?? []).map((s) => [s.user_id, s.score]),
+      );
+      setReviews(normalized.map((r) => ({ ...r, score: scoreMap.get(r.user_id) ?? null })));
+    } else {
+      setReviews([]);
+    }
+  }, [current?.id, user?.id]);
+
+  useEffect(() => {
+    void loadRatings();
+  }, [loadRatings]);
 
   const promptSleepTimerPremium = () => {
     Alert.alert(
@@ -86,7 +188,13 @@ export function PlayerScreen({ navigation }: Props) {
   const downloadCurrent = async () => {
     if (!user || !current) return;
     if (!canDownloadOffline) {
-      Alert.alert('Premium required', 'Offline downloads are available for Premium users and admins.');
+      Alert.alert('Premium required', 'Offline downloads are available for Premium users and admins.', [
+        { text: 'Not now', style: 'cancel' },
+        {
+          text: 'View Premium',
+          onPress: () => navigation.navigate('Tabs', { screen: 'Premium' }),
+        },
+      ]);
       return;
     }
     const { downloadSoundForOffline, alertDownloadResult } = await import('../../lib/downloads');
@@ -94,16 +202,49 @@ export function PlayerScreen({ navigation }: Props) {
     alertDownloadResult(result);
   };
 
-  const rateSound = async (score: number) => {
-    if (!user || !current) return;
-    const { error } = await supabase.from('ratings').upsert({
+  const submitRating = async () => {
+    if (!user || !current) {
+      Alert.alert('Sign in', 'Sign in to rate sounds.');
+      return;
+    }
+    if (myScore < 1) {
+      Alert.alert('Pick a rating', 'Choose how many stars this sound deserves.');
+      return;
+    }
+    setRatingBusy(true);
+    const { error: ratingError } = await supabase.from('ratings').upsert({
       user_id: user.id,
       sound_id: current.id,
-      score,
+      score: myScore,
       updated_at: new Date().toISOString(),
     });
-    if (error) Alert.alert('Rating failed', error.message);
-    else Alert.alert('Thanks', `Rated ${score} stars`);
+    if (ratingError) {
+      setRatingBusy(false);
+      Alert.alert('Rating failed', ratingError.message);
+      return;
+    }
+
+    const trimmed = comment.trim();
+    if (trimmed) {
+      const { error: reviewError } = await supabase.from('reviews').upsert(
+        {
+          user_id: user.id,
+          sound_id: current.id,
+          body: trimmed,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'user_id,sound_id' },
+      );
+      if (reviewError) {
+        setRatingBusy(false);
+        Alert.alert('Review failed', reviewError.message);
+        return;
+      }
+    }
+
+    setRatingBusy(false);
+    await loadRatings();
+    Alert.alert('Thanks', 'Your rating was saved.');
   };
 
   const addToPlaylist = async () => {
@@ -159,6 +300,7 @@ export function PlayerScreen({ navigation }: Props) {
     sleepEndsAt != null ? Math.max(0, Math.floor((sleepEndsAt - Date.now()) / 1000)) : null;
   void sleepTick;
   const [g0, g1] = moodPaletteFor(current.title);
+  const ratingLine = formatRatingSummary(avg, ratingCount);
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
@@ -174,6 +316,7 @@ export function PlayerScreen({ navigation }: Props) {
           paddingBottom: insets.bottom + 40,
         }}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
         <Pressable onPress={() => navigation.goBack()} hitSlop={12} style={styles.backRow}>
           <Ionicons name="chevron-down" size={22} color={colors.textMuted} />
@@ -188,9 +331,13 @@ export function PlayerScreen({ navigation }: Props) {
         <Text style={[styles.sub, { color: colors.textMuted }]} numberOfLines={3}>
           {current.description ?? 'X-Relax'}
         </Text>
+        <Text style={[styles.statsLine, { color: colors.textMuted }]}>
+          {formatPlayCount(playCount)}
+          {ratingLine ? ` · ${ratingLine}` : ''}
+        </Text>
         {queue.length > 1 ? (
           <Text style={[styles.queueMeta, { color: colors.textMuted }]}>
-            Track {queueIndex + 1} of {queue.length}
+            {queueLabel ? `${queueLabel} · ` : ''}Track {queueIndex + 1} of {queue.length}
           </Text>
         ) : null}
 
@@ -312,7 +459,16 @@ export function PlayerScreen({ navigation }: Props) {
             active={isFavourite}
           />
           <Chip icon="list-outline" label="Playlist" onPress={addToPlaylist} colors={colors} />
-          <Chip icon="download-outline" label="Download" onPress={downloadCurrent} colors={colors} />
+          {canDownloadOffline ? (
+            <Chip icon="download-outline" label="Download" onPress={downloadCurrent} colors={colors} />
+          ) : (
+            <Chip
+              icon="lock-closed-outline"
+              label="Download · Premium"
+              onPress={downloadCurrent}
+              colors={colors}
+            />
+          )}
           <Chip
             icon="share-outline"
             label="Share"
@@ -321,12 +477,98 @@ export function PlayerScreen({ navigation }: Props) {
           />
         </View>
 
-        <Text style={[styles.label, { color: colors.textMuted }]}>Rate</Text>
+        <Text style={[styles.label, { color: colors.textMuted }]}>Ratings & reviews</Text>
+        <View style={[styles.ratingCard, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+          <View style={styles.ratingHeader}>
+            <View>
+              <Text style={[styles.ratingAvg, { color: colors.text }]}>
+                {ratingCount ? avg.toFixed(1) : '—'}
+              </Text>
+              <Text style={[styles.ratingCount, { color: colors.textMuted }]}>
+                {ratingCount
+                  ? `${ratingCount} rating${ratingCount === 1 ? '' : 's'}`
+                  : 'No ratings yet'}
+              </Text>
+            </View>
+            <View style={styles.starRow}>
+              {[1, 2, 3, 4, 5].map((s) => (
+                <Text
+                  key={s}
+                  style={{
+                    fontSize: 18,
+                    color: colors.text,
+                    opacity: ratingCount && avg >= s - 0.25 ? 1 : 0.25,
+                  }}
+                >
+                  ★
+                </Text>
+              ))}
+            </View>
+          </View>
+        </View>
+
+        <Text style={[styles.subLabel, { color: colors.textMuted }]}>Your rating</Text>
         <View style={styles.chipRow}>
           {[1, 2, 3, 4, 5].map((score) => (
-            <Chip key={score} label={`★${score}`} onPress={() => rateSound(score)} colors={colors} />
+            <Chip
+              key={score}
+              label={'★'.repeat(score)}
+              onPress={() => setMyScore(score)}
+              colors={colors}
+              active={myScore === score}
+            />
           ))}
         </View>
+        <TextInput
+          value={comment}
+          onChangeText={setComment}
+          placeholder="Write a review (optional)"
+          placeholderTextColor={colors.textMuted}
+          multiline
+          style={[
+            styles.reviewInput,
+            {
+              color: colors.text,
+              borderColor: colors.border,
+              backgroundColor: colors.surface,
+            },
+          ]}
+        />
+        <Pressable
+          onPress={() => void submitRating()}
+          disabled={ratingBusy}
+          style={[styles.submitBtn, { backgroundColor: colors.inverse, opacity: ratingBusy ? 0.6 : 1 }]}
+        >
+          <Text style={[styles.submitText, { color: colors.inverseText }]}>
+            {ratingBusy ? 'Saving…' : 'Submit review'}
+          </Text>
+        </Pressable>
+
+        <Text style={[styles.subLabel, { color: colors.textMuted, marginTop: 20 }]}>Reviews</Text>
+        {reviews.map((row) => (
+          <View
+            key={row.id}
+            style={[styles.reviewCard, { borderColor: colors.border, backgroundColor: colors.surface }]}
+          >
+            <View style={styles.reviewTop}>
+              <Text style={[styles.reviewName, { color: colors.text }]}>
+                {row.profile?.display_name ?? 'Listener'}
+              </Text>
+              <Text style={{ color: colors.textMuted, fontSize: 12 }}>
+                {row.score ? '★'.repeat(row.score) : ''}
+              </Text>
+            </View>
+            <Text style={[styles.reviewBody, { color: colors.text }]}>{row.body}</Text>
+            <Text style={[styles.reviewDate, { color: colors.textMuted }]}>
+              {new Date(row.created_at).toLocaleDateString()}
+            </Text>
+          </View>
+        ))}
+        {!reviews.length ? (
+          <Text style={{ color: colors.textMuted, fontFamily: 'DMSans_400Regular', fontSize: 13 }}>
+            Be the first to leave a review.
+          </Text>
+        ) : null}
       </ScrollView>
     </View>
   );
@@ -394,6 +636,12 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     textAlign: 'center',
     marginTop: 8,
+    marginBottom: 4,
+  },
+  statsLine: {
+    fontFamily: 'DMSans_500Medium',
+    fontSize: 13,
+    textAlign: 'center',
     marginBottom: 8,
   },
   queueMeta: {
@@ -436,6 +684,12 @@ const styles = StyleSheet.create({
     marginTop: 22,
     marginBottom: 10,
   },
+  subLabel: {
+    fontFamily: 'DMSans_500Medium',
+    fontSize: 12,
+    marginTop: 14,
+    marginBottom: 8,
+  },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: {
     borderWidth: StyleSheet.hairlineWidth,
@@ -456,4 +710,41 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   lockedSleepText: { flex: 1, fontFamily: 'DMSans_400Regular', fontSize: 13, lineHeight: 18 },
+  ratingCard: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 16,
+    padding: 16,
+  },
+  ratingHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  ratingAvg: { fontFamily: 'Fraunces_700Bold', fontSize: 32, letterSpacing: -0.8 },
+  ratingCount: { fontFamily: 'DMSans_400Regular', fontSize: 13, marginTop: 2 },
+  starRow: { flexDirection: 'row', gap: 2 },
+  reviewInput: {
+    marginTop: 12,
+    minHeight: 90,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontFamily: 'DMSans_400Regular',
+    fontSize: 14,
+    textAlignVertical: 'top',
+  },
+  submitBtn: {
+    marginTop: 12,
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  submitText: { fontFamily: 'DMSans_700Bold', fontSize: 15 },
+  reviewCard: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 10,
+  },
+  reviewTop: { flexDirection: 'row', justifyContent: 'space-between', gap: 8, marginBottom: 6 },
+  reviewName: { fontFamily: 'DMSans_700Bold', fontSize: 14 },
+  reviewBody: { fontFamily: 'DMSans_400Regular', fontSize: 14, lineHeight: 20 },
+  reviewDate: { fontFamily: 'DMSans_400Regular', fontSize: 11, marginTop: 8 },
 });

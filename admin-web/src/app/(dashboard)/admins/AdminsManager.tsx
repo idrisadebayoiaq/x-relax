@@ -64,13 +64,22 @@ export function AdminsManager() {
     else void load();
   };
 
+  const setVerifiedBadge = async (userId: string, enabled: boolean) => {
+    const { error: badgeError } = await createClient().rpc('admin_set_admin_verified_badge', {
+      p_user_id: userId,
+      p_enabled: enabled,
+    });
+    if (badgeError) alert(badgeError.message);
+    else void load();
+  };
+
   return (
     <div className="space-y-8 max-w-3xl">
       <div className="border border-border bg-surface rounded-xl p-5 space-y-4">
         <h2 className="font-semibold">Add admin</h2>
         <p className="text-sm text-muted">
-          The person must already have an X-Relax account (app or website). Super admins are assigned automatically
-          when <strong>quoreebadebayo@gmail.com</strong> signs up.
+          The person must already have an X-Relax account (app or website). Super admins can also grant
+          blue verified badges so staff messages and announcements are trusted.
         </p>
         <div className="grid gap-3 sm:grid-cols-[1fr_auto_auto]">
           <input
@@ -107,29 +116,36 @@ export function AdminsManager() {
             <div>
               <p className="font-semibold">{row.display_name ?? 'User'}</p>
               <p className="text-sm text-muted">{row.email}</p>
-              <p className="text-xs text-muted mt-1">Added {new Date(row.created_at).toLocaleDateString()}</p>
+              <p className="text-xs text-muted mt-1">
+                Added {new Date(row.created_at).toLocaleDateString()}
+                {row.has_verified_badge ? ' · blue verified' : ' · unverified'}
+              </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               {row.admin_role === 'super' ? (
                 <span className="text-xs uppercase tracking-wider border border-border rounded-lg px-2 py-1">
-                  super
+                  super · verified
                 </span>
               ) : (
-                <select
-                  className="border border-border bg-background rounded-lg px-2 py-1 text-sm"
-                  value={row.admin_role}
-                  onChange={(e) => void changeRole(row.user_id, e.target.value as AdminRole)}
-                >
-                  {ROLES.map((r) => (
-                    <option key={r} value={r}>
-                      {r}
-                    </option>
-                  ))}
-                </select>
+                <>
+                  <select
+                    className="border border-border bg-background rounded-lg px-2 py-1 text-sm"
+                    value={row.admin_role}
+                    onChange={(e) => void changeRole(row.user_id, e.target.value as AdminRole)}
+                  >
+                    {ROLES.map((r) => (
+                      <option key={r} value={r}>
+                        {r}
+                      </option>
+                    ))}
+                  </select>
+                  <ActionButton
+                    label={row.has_verified_badge ? 'Revoke blue badge' : 'Grant blue badge'}
+                    onAction={async () => setVerifiedBadge(row.user_id, !row.has_verified_badge)}
+                  />
+                  <ActionButton label="Remove" onAction={async () => removeAdmin(row.user_id)} />
+                </>
               )}
-              {row.admin_role !== 'super' ? (
-                <ActionButton label="Remove" onAction={async () => removeAdmin(row.user_id)} />
-              ) : null}
             </div>
           </div>
         ))}

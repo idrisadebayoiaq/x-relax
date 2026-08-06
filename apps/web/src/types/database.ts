@@ -27,6 +27,7 @@ export type Profile = {
 export type AdminProfile = {
   user_id: string;
   role: AdminRole;
+  has_verified_badge?: boolean;
 };
 
 export type CreatorProfile = {
@@ -34,6 +35,8 @@ export type CreatorProfile = {
   bio: string | null;
   level: CreatorLevel;
   is_verified: boolean;
+  can_earn?: boolean;
+  has_blue_badge?: boolean;
 };
 
 export type Category = {

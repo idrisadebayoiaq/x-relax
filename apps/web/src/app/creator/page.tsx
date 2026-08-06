@@ -51,7 +51,12 @@ export default function CreatorPage() {
       <div className="grid sm:grid-cols-2 gap-3">
         <Link href="/creator/upload" className="card p-4">Upload sound</Link>
         <Link href="/creator/sounds" className="card p-4">My sounds</Link>
-        <Link href="/creator/verification" className="card p-4">Verification</Link>
+        <Link href="/creator/verification" className="card p-4 font-semibold">
+          Apply to earn
+          <span className="block text-sm text-muted font-normal mt-1">
+            Requirements · identity verify · admin review
+          </span>
+        </Link>
         <Link href="/creator/withdrawals" className="card p-4">Withdrawals</Link>
       </div>
     </div>

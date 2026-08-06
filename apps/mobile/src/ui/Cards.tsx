@@ -3,7 +3,7 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '../lib/useAppTheme';
-import { formatDuration, moodPaletteFor } from '../lib/format';
+import { formatDuration, formatPlayCount, formatRatingSummary, moodPaletteFor } from '../lib/format';
 import { CoverArt } from '../features/home/CoverArt';
 import type { Sound } from '../types/database';
 
@@ -18,6 +18,12 @@ export function SoundCard({
 }) {
   const { colors } = useAppTheme();
   const size = compact ? 120 : 148;
+  const rating = formatRatingSummary(sound.average_rating, sound.rating_count);
+  const meta = [formatDuration(sound.duration_seconds), formatPlayCount(sound.play_count), rating]
+    .filter(Boolean)
+    .join(' · ');
+
+  const tip = sound.description?.trim();
 
   if (compact) {
     return (
@@ -26,8 +32,13 @@ export function SoundCard({
         <Text style={[styles.compactTitle, { color: colors.text }]} numberOfLines={2}>
           {sound.title}
         </Text>
-        <Text style={[styles.meta, { color: colors.textMuted }]}>
-          {formatDuration(sound.duration_seconds)}
+        {tip ? (
+          <Text style={[styles.tip, { color: colors.textMuted }]} numberOfLines={2}>
+            {tip}
+          </Text>
+        ) : null}
+        <Text style={[styles.meta, { color: colors.textMuted }]} numberOfLines={1}>
+          {meta}
         </Text>
       </Pressable>
     );
@@ -43,8 +54,13 @@ export function SoundCard({
         <Text style={[styles.rowTitle, { color: colors.text }]} numberOfLines={1}>
           {sound.title}
         </Text>
-        <Text style={[styles.meta, { color: colors.textMuted }]}>
-          {formatDuration(sound.duration_seconds)}
+        {tip ? (
+          <Text style={[styles.tip, { color: colors.textMuted }]} numberOfLines={2}>
+            {tip}
+          </Text>
+        ) : null}
+        <Text style={[styles.meta, { color: colors.textMuted }]} numberOfLines={1}>
+          {meta}
         </Text>
       </View>
       <View style={[styles.play, { backgroundColor: colors.inverse }]}>
@@ -92,6 +108,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
     lineHeight: 17,
   },
+  tip: { fontFamily: 'DMSans_400Regular', fontSize: 11, marginTop: 3, lineHeight: 14 },
   meta: { fontFamily: 'DMSans_400Regular', fontSize: 11, marginTop: 2 },
   rowCard: {
     flexDirection: 'row',

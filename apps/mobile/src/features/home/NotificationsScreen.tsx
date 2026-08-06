@@ -109,7 +109,10 @@ export function NotificationsScreen() {
             <EmptyBlock title="All quiet" body="No notifications yet. We’ll nudge you when something matters." />
           }
           ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
-          renderItem={({ item }) => (
+          renderItem={({ item }) => {
+            const fromUnverified =
+              item.data?.from_unverified_admin === true || item.data?.admin_verified === false;
+            return (
             <Pressable
               onPress={() => markRead(item.id)}
               style={[
@@ -130,6 +133,11 @@ export function NotificationsScreen() {
                 </View>
               )}
               <View style={{ flex: 1 }}>
+                {fromUnverified ? (
+                  <Text style={[styles.warn, { color: '#B45309' }]}>
+                    ⚠ From an unverified admin
+                  </Text>
+                ) : null}
                 <Text style={[styles.rowTitle, { color: colors.text }]}>{item.title}</Text>
                 {item.body ? (
                   <Text style={[styles.rowBody, { color: colors.textMuted }]}>{item.body}</Text>
@@ -139,7 +147,8 @@ export function NotificationsScreen() {
                 </Text>
               </View>
             </Pressable>
-          )}
+            );
+          }}
         />
       )}
     </View>
@@ -175,6 +184,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   rowTitle: { fontFamily: 'DMSans_700Bold', fontSize: 15 },
+  warn: { fontFamily: 'DMSans_500Medium', fontSize: 11, marginBottom: 4 },
   rowBody: { fontFamily: 'DMSans_400Regular', fontSize: 13, lineHeight: 19, marginTop: 4 },
   meta: { fontFamily: 'DMSans_400Regular', fontSize: 11, marginTop: 8 },
 });

@@ -74,9 +74,13 @@ export default function LibraryPage() {
     void load();
   };
 
-  const openSound = async (sound: Sound, list: Sound[]) => {
+  const openSound = async (sound: Sound, list: Sound[], queueLabel: string) => {
     const index = list.findIndex((s) => s.id === sound.id);
-    const started = await playSound(sound, { queue: list, queueIndex: index >= 0 ? index : 0 });
+    const started = await playSound(sound, {
+      queue: list,
+      queueIndex: index >= 0 ? index : 0,
+      queueLabel,
+    });
     if (started) router.push('/player');
   };
 
@@ -125,7 +129,7 @@ export default function LibraryPage() {
       {tab === 'favourites' && online ? (
         <div className="grid gap-3">
           {favourites.map((sound) => (
-            <SoundCard key={sound.id} sound={sound} onPlay={() => void openSound(sound, favourites)} />
+            <SoundCard key={sound.id} sound={sound} onPlay={() => void openSound(sound, favourites, 'Favourites')} />
           ))}
         </div>
       ) : null}
@@ -156,7 +160,7 @@ export default function LibraryPage() {
                   <p className="font-semibold">{sound.title}</p>
                   <p className="text-sm text-muted">{formatDuration(sound.duration_seconds)} · Offline ready</p>
                 </div>
-                <button type="button" className="btn btn-outline" onClick={() => void openSound(sound, downloads)}>Play</button>
+                <button type="button" className="btn btn-outline" onClick={() => void openSound(sound, downloads, 'Downloads')}>Play</button>
                 {online ? (
                   <button type="button" className="chip" onClick={() => void removeDownload(sound.id)}>Remove</button>
                 ) : null}

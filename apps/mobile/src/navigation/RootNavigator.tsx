@@ -7,6 +7,7 @@ import { AuthNavigator } from './AuthNavigator';
 import { MainTabs } from './MainTabs';
 import { PlayerScreen } from '../features/player/PlayerScreen';
 import { PlaylistDetailScreen } from '../features/library/PlaylistDetailScreen';
+import { CategoryDetailScreen } from '../features/library/CategoryDetailScreen';
 import { PaymentCheckoutScreen } from '../features/premium/PaymentCheckoutScreen';
 import { MyPaymentsScreen } from '../features/premium/MyPaymentsScreen';
 import { AdminPaymentsScreen } from '../features/premium/AdminPaymentsScreen';
@@ -38,6 +39,7 @@ function AppStack() {
       <Stack.Screen name="Tabs" component={MainTabs} />
       <Stack.Screen name="Player" component={PlayerScreen} options={{ presentation: 'modal' }} />
       <Stack.Screen name="PlaylistDetail" component={PlaylistDetailScreen} />
+      <Stack.Screen name="CategoryDetail" component={CategoryDetailScreen} />
       <Stack.Screen name="PaymentCheckout" component={PaymentCheckoutScreen} />
       <Stack.Screen name="MyPayments" component={MyPaymentsScreen} />
       <Stack.Screen name="AdminPayments" component={AdminPaymentsScreen} />

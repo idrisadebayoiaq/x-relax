@@ -47,7 +47,11 @@ export default function SearchPage() {
 
   const open = async (sound: Sound) => {
     const index = filtered.findIndex((s) => s.id === sound.id);
-    const started = await playSound(sound, { queue: filtered, queueIndex: index });
+    const started = await playSound(sound, {
+      queue: filtered,
+      queueIndex: index,
+      queueLabel: query.trim() ? 'Search results' : 'Catalog',
+    });
     if (started) router.push('/player');
   };
 

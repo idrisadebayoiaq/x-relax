@@ -8,6 +8,7 @@ type Row = {
   id: string;
   user_id: string;
   status: string;
+  document_type?: string | null;
   created_at: string;
   profile?: { display_name: string | null };
 };
@@ -19,7 +20,7 @@ export default function AdminVerificationsPage() {
   const load = async () => {
     const { data } = await createClient()
       .from('creator_verifications')
-      .select('id, user_id, status, created_at, profile:profiles(display_name)')
+      .select('id, user_id, status, document_type, document_path, created_at, profile:profiles(display_name)')
       .eq('status', 'pending')
       .order('created_at', { ascending: true });
     const normalized = ((data ?? []) as unknown as Row[]).map((row) => ({
@@ -37,7 +38,7 @@ export default function AdminVerificationsPage() {
     const { error } = await createClient().rpc('review_creator_verification', {
       p_id: id,
       p_status: status,
-      p_admin_note: status === 'approved' ? 'Verified' : 'Requirements not met',
+      p_admin_note: status === 'approved' ? 'Earning approved' : 'Earning application rejected',
     });
     if (error) alert(error.message);
     else void load();
@@ -47,13 +48,17 @@ export default function AdminVerificationsPage() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-xl font-semibold">Verification queue</h2>
+      <h2 className="text-xl font-semibold">Earning applications</h2>
+      <p className="text-sm text-muted">Identity verification for creators applying to earn.</p>
       <div className="space-y-3">
         {rows.map((row) => (
           <div key={row.id} className="card p-4 flex items-center justify-between gap-4">
             <div>
               <p className="font-semibold">{row.profile?.display_name ?? row.user_id}</p>
-              <p className="text-sm text-muted">{new Date(row.created_at).toLocaleDateString()}</p>
+              <p className="text-sm text-muted">
+                {row.document_type ? `${row.document_type.replaceAll('_', ' ')} · ` : ''}
+                {new Date(row.created_at).toLocaleDateString()}
+              </p>
             </div>
             <div className="flex gap-2">
               <button type="button" className="chip chip-active" onClick={() => void review(row.id, 'approved')}>Approve</button>

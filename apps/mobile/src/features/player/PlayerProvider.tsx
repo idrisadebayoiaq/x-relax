@@ -17,10 +17,10 @@ import {
 import { Alert } from 'react-native';
 import { supabase } from '../../lib/supabase';
 import {
-  canStartSound,
-  FREE_DAILY_SOUND_LIMIT,
+  claimDailySoundPlay,
+  DAILY_LIMIT_MESSAGE,
+  filterQueueForDailyLimit,
   getTodayPlayedSoundIds,
-  markSoundPlayedToday,
 } from '../../lib/dailyListenLimit';
 import { stopExternalMixPlayback } from '../../lib/mixPlayback';
 import { useAuth } from '../auth/AuthProvider';
@@ -29,6 +29,7 @@ import type { Sound } from '../../types/database';
 export type PlaySoundOptions = {
   queue?: Sound[];
   queueIndex?: number;
+  queueLabel?: string;
 };
 
 type PlayerContextValue = {
@@ -41,6 +42,7 @@ type PlayerContextValue = {
   sleepEndsAt: number | null;
   queue: Sound[];
   queueIndex: number;
+  queueLabel: string | null;
   hasNext: boolean;
   hasPrevious: boolean;
   playSound: (sound: Sound, options?: PlaySoundOptions) => Promise<boolean>;
@@ -82,10 +84,12 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [isFavourite, setIsFavourite] = useState(false);
   const [queue, setQueue] = useState<Sound[]>([]);
   const [queueIndex, setQueueIndex] = useState(0);
+  const [queueLabel, setQueueLabel] = useState<string | null>(null);
   const lastHistoryWrite = useRef(0);
   const currentRef = useRef<Sound | null>(null);
   const queueRef = useRef<Sound[]>([]);
   const queueIndexRef = useRef(0);
+  const queueLabelRef = useRef<string | null>(null);
   const isLoopingRef = useRef(false);
   const playNextRef = useRef<() => Promise<boolean>>(async () => false);
   const sleepEndsAtRef = useRef<number | null>(null);
@@ -98,6 +102,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   sleepEndsAtRef.current = sleepEndsAt;
   queueRef.current = queue;
   queueIndexRef.current = queueIndex;
+  queueLabelRef.current = queueLabel;
   isLoopingRef.current = isLooping;
 
   useEffect(() => {
@@ -256,12 +261,14 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     await unload();
     setQueue([]);
     setQueueIndex(0);
+    setQueueLabel(null);
     queueRef.current = [];
     queueIndexRef.current = 0;
+    queueLabelRef.current = null;
   }, [unload]);
 
   const loadSound = useCallback(
-    async (sound: Sound, index: number, nextQueue: Sound[]) => {
+    async (sound: Sound, index: number, nextQueue: Sound[], nextQueueLabel?: string | null) => {
       if (!sound.audio_url) return false;
 
       await unload();
@@ -274,6 +281,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       setQueueIndex(index);
       queueRef.current = nextQueue;
       queueIndexRef.current = index;
+      if (nextQueueLabel !== undefined) {
+        setQueueLabel(nextQueueLabel);
+        queueLabelRef.current = nextQueueLabel;
+      }
 
       const loopForSleep =
         isPremium && sleepEndsAtRef.current != null && Date.now() < sleepEndsAtRef.current;
@@ -316,34 +327,37 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       stopExternalMixPlayback();
 
       const userId = user?.id ?? null;
-      const { allowed } = await canStartSound(userId, sound.id, hasUnlimitedListening);
-      if (!allowed) {
-        Alert.alert(
-          'Daily limit reached',
-          `Free listeners can play ${FREE_DAILY_SOUND_LIMIT} different sounds per day. Upgrade to Premium for unlimited listening.`,
-        );
+      const claim = await claimDailySoundPlay(userId, sound.id, hasUnlimitedListening);
+      if (!claim.allowed) {
+        Alert.alert('Daily limit reached', DAILY_LIMIT_MESSAGE);
         return false;
       }
 
-      const playedToday = await getTodayPlayedSoundIds(userId);
-      const isNewToday = !playedToday.includes(sound.id);
+      const unlockedToday = await getTodayPlayedSoundIds(userId);
+      // Include the sound we just claimed so queue filtering allows its siblings in remaining slots.
+      if (!unlockedToday.includes(sound.id)) unlockedToday.push(sound.id);
 
-      const playableQueue = (options?.queue ?? [sound]).filter((item) => !!item.audio_url);
-      const index =
-        options?.queueIndex ??
-        Math.max(
-          0,
-          playableQueue.findIndex((item) => item.id === sound.id),
-        );
-
-      const started = await loadSound(sound, index, playableQueue);
-      if (!started) return false;
-
-      if (isNewToday && !hasUnlimitedListening) {
-        await markSoundPlayedToday(userId, sound.id);
+      const rawQueue = (options?.queue ?? [sound]).filter((item) => !!item.audio_url);
+      const playableQueue = filterQueueForDailyLimit(
+        rawQueue,
+        unlockedToday,
+        hasUnlimitedListening,
+      );
+      if (!playableQueue.some((item) => item.id === sound.id)) {
+        Alert.alert('Daily limit reached', DAILY_LIMIT_MESSAGE);
+        return false;
       }
 
-      return true;
+      const index = Math.max(
+        0,
+        playableQueue.findIndex((item) => item.id === sound.id),
+      );
+      const label =
+        options?.queueLabel ??
+        (options?.queue ? queueLabelRef.current : null) ??
+        (playableQueue.length > 1 ? 'Queue' : null);
+
+      return loadSound(sound, index, playableQueue, label);
     },
     [user, hasUnlimitedListening, loadSound],
   );
@@ -354,7 +368,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     if (idx >= q.length - 1) return false;
     const nextSound = q[idx + 1];
     if (!nextSound?.audio_url) return false;
-    return playSound(nextSound, { queue: q, queueIndex: idx + 1 });
+    return playSound(nextSound, {
+      queue: q,
+      queueIndex: idx + 1,
+      queueLabel: queueLabelRef.current ?? undefined,
+    });
   }, [playSound]);
 
   const playPrevious = useCallback(async (): Promise<boolean> => {
@@ -371,7 +389,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     }
     const prevSound = q[idx - 1];
     if (!prevSound?.audio_url) return false;
-    return playSound(prevSound, { queue: q, queueIndex: idx - 1 });
+    return playSound(prevSound, {
+      queue: q,
+      queueIndex: idx - 1,
+      queueLabel: queueLabelRef.current ?? undefined,
+    });
   }, [playSound]);
 
   playNextRef.current = playNext;
@@ -484,6 +506,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       sleepEndsAt,
       queue,
       queueIndex,
+      queueLabel,
       hasNext: queue.length > 0 && queueIndex < queue.length - 1,
       hasPrevious: queue.length > 0 && (queueIndex > 0 || positionMs > 3000),
       playSound,
@@ -509,6 +532,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       sleepEndsAt,
       queue,
       queueIndex,
+      queueLabel,
       playSound,
       playNext,
       playPrevious,

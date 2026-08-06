@@ -17,7 +17,7 @@ import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '../../lib/useAppTheme';
-import { formatDuration, moodPaletteFor } from '../../lib/format';
+import { formatDuration, formatPlayCount, formatRatingSummary, moodPaletteFor } from '../../lib/format';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../auth/AuthProvider';
 import { usePlayer } from '../player/PlayerProvider';
@@ -61,7 +61,7 @@ export function LibraryScreen() {
       setLoading(false);
       return;
     }
-    const [{ data: pls }, { data: favs }, { data: dls }] = await Promise.all([
+    const [{ data: pls }, { data: favs }, dlsResult] = await Promise.all([
       supabase
         .from('playlists')
         .select('*')
@@ -72,21 +72,24 @@ export function LibraryScreen() {
         .select('sound:sounds(*)')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false }),
-      supabase
-        .from('downloads')
-        .select('local_uri, sound:sounds(*)')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false }),
+      canDownloadOffline
+        ? supabase
+            .from('downloads')
+            .select('local_uri, sound:sounds(*)')
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: false })
+        : Promise.resolve({ data: [] as { local_uri: string | null; sound: Sound | null }[] }),
     ]);
     setPlaylists((pls as Playlist[]) ?? []);
     setFavourites(((favs as any[]) ?? []).map((f) => f.sound).filter(Boolean));
+    const dls = dlsResult.data;
     setDownloads(
       ((dls as any[]) ?? [])
         .map((d) => (d.sound ? { ...d.sound, local_uri: d.local_uri } : null))
         .filter(Boolean),
     );
     setLoading(false);
-  }, [user]);
+  }, [user, canDownloadOffline]);
 
   useFocusEffect(
     useCallback(() => {
@@ -122,6 +125,7 @@ export function LibraryScreen() {
   const openSound = async (
     item: Sound & { local_uri?: string | null },
     list?: (Sound & { local_uri?: string | null })[],
+    label?: string,
   ) => {
     const playable = item.local_uri ? { ...item, audio_url: item.local_uri } : item;
     const source = list ?? [item];
@@ -129,7 +133,11 @@ export function LibraryScreen() {
       entry.local_uri ? { ...entry, audio_url: entry.local_uri } : entry,
     );
     const index = queue.findIndex((entry) => entry.id === item.id);
-    const started = await playSound(playable, { queue, queueIndex: index >= 0 ? index : 0 });
+    const started = await playSound(playable, {
+      queue,
+      queueIndex: index >= 0 ? index : 0,
+      queueLabel: label,
+    });
     if (started) navigation.navigate('Player', { soundId: item.id });
   };
 
@@ -297,8 +305,14 @@ export function LibraryScreen() {
             <SoundRow
               sound={item}
               colors={colors}
-              meta={formatDuration(item.duration_seconds)}
-              onPress={() => openSound(item, favourites)}
+              meta={[
+                formatDuration(item.duration_seconds),
+                formatPlayCount(item.play_count),
+                formatRatingSummary(item.average_rating, item.rating_count),
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+              onPress={() => openSound(item, favourites, 'Favourites')}
             />
           )}
           ListEmptyComponent={
@@ -342,7 +356,7 @@ export function LibraryScreen() {
               sound={item}
               colors={colors}
               meta="Available offline"
-              onPress={() => openSound(item, downloads)}
+              onPress={() => openSound(item, downloads, 'Downloads')}
             />
           )}
           ListEmptyComponent={

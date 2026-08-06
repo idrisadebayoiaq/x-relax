@@ -22,16 +22,19 @@ type Message = {
   body: string;
   created_at: string;
   sender_id: string;
+  sender_verified?: boolean | null;
 };
 
 export default function AdminPaymentDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const { isAdmin, user, refreshProfile } = useAuth();
+  const { isAdmin, user, refreshProfile, adminProfile } = useAuth();
   const [row, setRow] = useState<PaymentDetail | null>(null);
   const [proofUrl, setProofUrl] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [reply, setReply] = useState('');
   const [busy, setBusy] = useState(false);
+  const isVerifiedAdmin =
+    !!adminProfile?.has_verified_badge || adminProfile?.role === 'super';
 
   const load = async () => {
     const supabase = createClient();
@@ -52,7 +55,7 @@ export default function AdminPaymentDetailPage() {
 
     const { data: msgs } = await supabase
       .from('payment_messages')
-      .select('id, body, created_at, sender_id')
+      .select('id, body, created_at, sender_id, sender_verified')
       .eq('payment_request_id', id)
       .order('created_at', { ascending: true });
     setMessages((msgs as Message[]) ?? []);
@@ -80,10 +83,17 @@ export default function AdminPaymentDetailPage() {
 
   const sendReply = async () => {
     if (!user || !reply.trim()) return;
+    if (!isVerifiedAdmin) {
+      const ok = confirm(
+        'Warning: your admin account is not blue-verified. The user will see a warning on this message. Continue?',
+      );
+      if (!ok) return;
+    }
     const { error } = await createClient().from('payment_messages').insert({
       payment_request_id: id,
       sender_id: user.id,
       body: reply.trim(),
+      sender_verified: isVerifiedAdmin,
     });
     if (error) alert(error.message);
     else {
@@ -122,8 +132,19 @@ export default function AdminPaymentDetailPage() {
       ) : null}
       <div className="space-y-3">
         <h3 className="font-semibold">Chat</h3>
+        {!isVerifiedAdmin ? (
+          <div className="card p-3 border-amber-500/40 bg-amber-500/5 text-sm text-muted">
+            Unverified admin — users will see a warning on your replies until a super admin grants
+            your blue badge.
+          </div>
+        ) : null}
         {messages.map((m) => (
-          <div key={m.id} className="card p-3 text-sm">
+          <div key={m.id} className="card p-3 text-sm space-y-1">
+            {m.sender_verified === false ? (
+              <p className="text-xs text-amber-700 dark:text-amber-300">
+                ⚠ Sent by an unverified admin
+              </p>
+            ) : null}
             <p>{m.body}</p>
             <p className="text-xs text-muted mt-1">{new Date(m.created_at).toLocaleString()}</p>
           </div>

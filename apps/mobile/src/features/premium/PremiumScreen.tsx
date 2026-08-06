@@ -34,7 +34,7 @@ export function PremiumScreen() {
       .select('*')
       .eq('is_active', true)
       .order('sort_order');
-    setPlans((planRows as SubscriptionPlan[]) ?? []);
+    setPlans(((planRows as SubscriptionPlan[]) ?? []).filter((p) => p.code !== 'creator_blue_badge'));
     setLoading(false);
   }, []);
 
@@ -71,7 +71,7 @@ export function PremiumScreen() {
           <Text style={styles.heroBody}>
             {isPremium
               ? 'Unlimited sounds, sleep timer, downloads, and Mix Studio are yours.'
-              : `Free listeners get ${FREE_DAILY_SOUND_LIMIT} sounds per day at normal length. Premium removes the limit and adds sleep timer.`}
+              : `Free accounts unlock ${FREE_DAILY_SOUND_LIMIT} sounds per day (replay those freely). Premium removes the limit and adds sleep timer, downloads, and Mix Studio.`}
           </Text>
         </LinearGradient>
       </View>
@@ -80,7 +80,7 @@ export function PremiumScreen() {
         <View style={[styles.freeCard, { borderColor: colors.border }]}>
           <Text style={[styles.freeTitle, { color: colors.text }]}>Free plan</Text>
           <Text style={[styles.freeBody, { color: colors.textMuted }]}>
-            {`· ${FREE_DAILY_SOUND_LIMIT} different sounds per day\n· Normal track length (no sleep timer)\n· No Mix Studio or offline downloads\n· Browse, search, and favourites`}
+            {`· Unlock ${FREE_DAILY_SOUND_LIMIT} different sounds per day\n· Unlimited replays of those ${FREE_DAILY_SOUND_LIMIT} the same day\n· No other sounds until tomorrow\n· No Mix Studio or offline downloads`}
           </Text>
         </View>
       ) : null}
