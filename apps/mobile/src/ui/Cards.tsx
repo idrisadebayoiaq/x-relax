@@ -23,8 +23,6 @@ export function SoundCard({
     .filter((part) => part && part !== '—')
     .join(' · ');
 
-  const tip = sound.description?.trim();
-
   if (compact) {
     return (
       <Pressable style={styles.compact} onPress={onPress}>
@@ -32,11 +30,6 @@ export function SoundCard({
         <Text style={[styles.compactTitle, { color: colors.text }]} numberOfLines={2}>
           {sound.title}
         </Text>
-        {tip ? (
-          <Text style={[styles.tip, { color: colors.textMuted }]} numberOfLines={2}>
-            {tip}
-          </Text>
-        ) : null}
         <Text style={[styles.meta, { color: colors.textMuted }]} numberOfLines={1}>
           {meta}
         </Text>
@@ -54,11 +47,6 @@ export function SoundCard({
         <Text style={[styles.rowTitle, { color: colors.text }]} numberOfLines={1}>
           {sound.title}
         </Text>
-        {tip ? (
-          <Text style={[styles.tip, { color: colors.textMuted }]} numberOfLines={2}>
-            {tip}
-          </Text>
-        ) : null}
         <Text style={[styles.meta, { color: colors.textMuted }]} numberOfLines={1}>
           {meta}
         </Text>
@@ -108,8 +96,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
     lineHeight: 17,
   },
-  tip: { fontFamily: 'DMSans_400Regular', fontSize: 11, marginTop: 3, lineHeight: 14 },
-  meta: { fontFamily: 'DMSans_400Regular', fontSize: 11, marginTop: 2 },
+  meta: { fontFamily: 'DMSans_400Regular', fontSize: 11, marginTop: 4 },
   rowCard: {
     flexDirection: 'row',
     alignItems: 'center',

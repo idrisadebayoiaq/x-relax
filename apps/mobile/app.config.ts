@@ -7,7 +7,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: 'X-Relax',
   slug: 'x-relax',
-  version: '1.0.9',
+  version: '1.0.10',
   orientation: 'portrait',
   icon: './assets/brand/app-icon.png',
   userInterfaceStyle: 'automatic',

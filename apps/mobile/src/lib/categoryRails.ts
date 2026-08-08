@@ -51,14 +51,16 @@ export const CATEGORY_ICONS: Record<string, string> = {
   wind: 'cloudy-outline',
 };
 
-/** Group published sounds into home rails for every category that has tracks. */
+/** Group published sounds into home rails. Pass onlySlugs to limit which category rails appear. */
 export function buildCategoryRails(opts: {
   categories: { id: string; name: string; slug: string; sort_order?: number | null }[];
   categoryLinks: { sound_id: string; category_id: string }[];
   sounds: Sound[];
   limitPerCategory?: number;
+  onlySlugs?: string[];
 }): CategoryRail[] {
-  const { categories, categoryLinks, sounds, limitPerCategory = 12 } = opts;
+  const { categories, categoryLinks, sounds, limitPerCategory = 12, onlySlugs } = opts;
+  const allow = onlySlugs?.length ? new Set(onlySlugs) : null;
   const byId = new Map(sounds.map((s) => [s.id, s]));
   const byCat = new Map<string, Sound[]>();
 
@@ -71,6 +73,7 @@ export function buildCategoryRails(opts: {
   }
 
   return [...categories]
+    .filter((cat) => !allow || allow.has(cat.slug))
     .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
     .map((cat) => {
       const data = [...(byCat.get(cat.id) ?? [])]

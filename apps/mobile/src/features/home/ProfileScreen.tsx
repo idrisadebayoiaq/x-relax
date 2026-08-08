@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import {
   Alert,
+  Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -11,23 +13,31 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../lib/useAppTheme';
+import { COUNTRIES, countryName } from '../../lib/countries';
 import { moodPaletteFor } from '../../lib/format';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../auth/AuthProvider';
 import type { RootStackParamList } from '../../navigation/types';
-import {
-  OutlineRow,
-  PrimaryButton,
-  ScreenScaffold,
-  SectionLabel,
-} from '../../ui/Screen';
+import { ScreenScaffold } from '../../ui/Screen';
 import { VerifiedBadge } from '../../ui/VerifiedBadge';
+
+const GOLD = '#C9A227';
+const GOLD_SOFT = 'rgba(201, 162, 39, 0.18)';
+
+type ProfileStats = {
+  soundsSaved: number;
+  favourites: number;
+  downloads: number;
+  listeningHours: number;
+};
 
 export function ProfileScreen() {
   const { colors, isDark } = useAppTheme();
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const {
     profile,
@@ -36,19 +46,32 @@ export function ProfileScreen() {
     isPremium,
     isCreator,
     isAdmin,
+    canDownloadOffline,
     signOut,
     updateProfile,
+    refreshProfile,
   } = useAuth();
+
   const [name, setName] = useState(profile?.display_name ?? '');
+  const [countryCode, setCountryCode] = useState(profile?.country_code ?? '');
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
+  const [avatarFailed, setAvatarFailed] = useState(false);
   const [isVerifiedCreator, setIsVerifiedCreator] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [stats, setStats] = useState<ProfileStats>({
+    soundsSaved: 0,
+    favourites: 0,
+    downloads: 0,
+    listeningHours: 0,
+  });
 
   useEffect(() => {
     setName(profile?.display_name ?? '');
+    setCountryCode(profile?.country_code ?? '');
     setAvatarUri(null);
-  }, [profile?.display_name, profile?.avatar_url]);
+    setAvatarFailed(false);
+  }, [profile?.display_name, profile?.avatar_url, profile?.country_code]);
 
   const loadCreator = useCallback(async () => {
     if (!user || !isCreator) {
@@ -63,13 +86,62 @@ export function ProfileScreen() {
     setIsVerifiedCreator(!!data?.is_verified || !!data?.can_earn);
   }, [user, isCreator]);
 
-  useEffect(() => {
-    loadCreator();
-  }, [loadCreator]);
+  const loadStats = useCallback(async () => {
+    if (!user) return;
+    const [{ count: favCount }, { count: dlCount }, { data: playlistItems }, { data: history }] =
+      await Promise.all([
+        supabase
+          .from('favourites')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', user.id),
+        canDownloadOffline
+          ? supabase
+              .from('downloads')
+              .select('id', { count: 'exact', head: true })
+              .eq('user_id', user.id)
+          : Promise.resolve({ count: 0 }),
+        supabase
+          .from('playlists')
+          .select('id, items:playlist_items(id)')
+          .eq('user_id', user.id),
+        supabase
+          .from('listening_history')
+          .select('progress_seconds')
+          .eq('user_id', user.id)
+          .limit(500),
+      ]);
+
+    const savedInPlaylists = ((playlistItems as { items?: { id: string }[] }[]) ?? []).reduce(
+      (sum, pl) => sum + (pl.items?.length ?? 0),
+      0,
+    );
+    const listeningSeconds = ((history as { progress_seconds?: number }[]) ?? []).reduce(
+      (sum, row) => sum + Number(row.progress_seconds ?? 0),
+      0,
+    );
+
+    setStats({
+      soundsSaved: savedInPlaylists,
+      favourites: Number(favCount ?? 0),
+      downloads: Number(dlCount ?? 0),
+      listeningHours: Math.max(0, Math.round(listeningSeconds / 3600)),
+    });
+  }, [user, canDownloadOffline]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void refreshProfile();
+      void loadCreator();
+      void loadStats();
+    }, [refreshProfile, loadCreator, loadStats]),
+  );
 
   const showWhiteBadge = isPremium;
   const showBlueBadge =
     isVerifiedCreator || !!adminProfile?.has_verified_badge || adminProfile?.role === 'super';
+
+  /** Paid Premium that is still valid (not creator/admin perk alone). */
+  const premiumActive = isPremium;
 
   const pickAvatar = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -79,7 +151,9 @@ export function ProfileScreen() {
       quality: 0.85,
     });
     if (!result.canceled && result.assets[0]?.uri) {
+      setAvatarFailed(false);
       setAvatarUri(result.assets[0].uri);
+      setEditOpen(true);
     }
   };
 
@@ -90,200 +164,658 @@ export function ProfileScreen() {
       return;
     }
     setBusy(true);
-    setMessage(null);
+    if (!countryCode) {
+      Alert.alert('Country required', 'Select your country for payments and analytics.');
+      return;
+    }
     const result = await updateProfile({
       displayName: trimmed,
       avatarUri: avatarUri ?? undefined,
+      countryCode,
     });
     setBusy(false);
     if (result.error) {
-      setMessage(result.error);
-    } else {
-      setAvatarUri(null);
-      setMessage('Profile saved');
+      Alert.alert('Could not save', result.error);
+      return;
     }
+    setAvatarUri(null);
+    setEditOpen(false);
+    Alert.alert('Saved', 'Your profile was updated.');
   };
 
   const initial = (profile?.display_name?.trim()?.[0] ?? user?.email?.[0] ?? 'X').toUpperCase();
   const avatarSource = avatarUri ?? profile?.avatar_url ?? null;
+  const showRemoteAvatar = !!avatarSource && !avatarFailed;
+  const cardBg = isDark ? '#141414' : colors.surface;
+  const roleLabel =
+    profile?.role === 'admin'
+      ? 'Admin'
+      : profile?.role === 'creator'
+        ? 'Creator'
+        : 'Listener';
 
   return (
     <ScreenScaffold
       title="Profile"
-      subtitle="Account, preferences, and legal"
+      subtitle="Manage your account, sounds, and preferences."
+      right={
+        <Pressable onPress={() => setEditOpen(true)} hitSlop={10} style={styles.gearBtn}>
+          <Ionicons name="settings-outline" size={22} color={colors.text} />
+        </Pressable>
+      }
+      contentStyle={{ paddingBottom: 48 }}
     >
+      {/* Hero */}
       <View style={styles.heroWrap}>
+        <View style={styles.waveBehind} pointerEvents="none">
+          <LinearGradient
+            colors={
+              isDark
+                ? ['transparent', 'rgba(201,162,39,0.08)', 'transparent']
+                : ['transparent', 'rgba(201,162,39,0.12)', 'transparent']
+            }
+            start={{ x: 0, y: 0.5 }}
+            end={{ x: 1, y: 0.5 }}
+            style={StyleSheet.absoluteFill}
+          />
+        </View>
+
         <Pressable onPress={pickAvatar} style={styles.avatarPress}>
-          {avatarSource ? (
-            <Image source={{ uri: avatarSource }} style={styles.avatarImage} contentFit="cover" />
-          ) : (
-            <LinearGradient colors={moodPaletteFor(user?.email ?? 'profile')} style={styles.avatar}>
-              <Text style={styles.avatarMark}>{initial}</Text>
-            </LinearGradient>
-          )}
+          <LinearGradient
+            colors={[GOLD, '#8B6914', GOLD]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.avatarRing}
+          >
+            <View style={[styles.avatarInner, { backgroundColor: colors.background }]}>
+              {showRemoteAvatar ? (
+                <Image
+                  source={{ uri: avatarSource }}
+                  style={styles.avatarImage}
+                  contentFit="cover"
+                  cachePolicy="memory-disk"
+                  recyclingKey={avatarSource}
+                  onError={() => setAvatarFailed(true)}
+                />
+              ) : (
+                <LinearGradient
+                  colors={moodPaletteFor(user?.email ?? 'profile')}
+                  style={styles.avatarFallback}
+                >
+                  <Text style={styles.avatarMark}>{initial}</Text>
+                </LinearGradient>
+              )}
+            </View>
+          </LinearGradient>
           <View style={[styles.cameraBtn, { backgroundColor: colors.inverse }]}>
-            <Ionicons name="camera" size={14} color={colors.inverseText} />
+            <Ionicons name="camera" size={13} color={colors.inverseText} />
           </View>
         </Pressable>
 
         <View style={styles.nameRow}>
-          <Text style={[styles.name, { color: colors.text }]}>
+          <Text style={[styles.name, { color: colors.text }]} numberOfLines={1}>
             {profile?.display_name ?? 'Listener'}
           </Text>
           {showWhiteBadge ? <VerifiedBadge size={18} tone="white" /> : null}
           {showBlueBadge ? <VerifiedBadge size={18} tone="blue" /> : null}
         </View>
-        <Text style={[styles.email, { color: colors.textMuted }]}>{user?.email ?? '—'}</Text>
+        <Text style={[styles.email, { color: colors.textMuted }]} numberOfLines={1}>
+          {user?.email ?? '—'}
+        </Text>
+
         <View style={styles.badgeRow}>
-          <Badge label={profile?.role ?? 'listener'} colors={colors} />
-          <Badge label={isPremium ? 'premium' : 'free'} colors={colors} />
-          {adminProfile ? <Badge label={`admin · ${adminProfile.role}`} colors={colors} /> : null}
-          {isVerifiedCreator ? <Badge label="verified creator" colors={colors} /> : null}
-          {adminProfile?.has_verified_badge || adminProfile?.role === 'super' ? (
-            <Badge label="verified admin" colors={colors} />
+          <View style={[styles.rolePill, { backgroundColor: isDark ? '#1C1C1C' : '#EDEAE4' }]}>
+            <Text style={[styles.rolePillText, { color: colors.text }]}>{roleLabel}</Text>
+          </View>
+          {premiumActive ? (
+            <View style={[styles.premiumPill, { borderColor: GOLD, backgroundColor: GOLD_SOFT }]}>
+              <Ionicons name="diamond" size={12} color={GOLD} />
+              <Text style={[styles.premiumPillText, { color: GOLD }]}>Premium</Text>
+            </View>
+          ) : (
+            <View style={[styles.rolePill, { backgroundColor: isDark ? '#1C1C1C' : '#EDEAE4' }]}>
+              <Text style={[styles.rolePillText, { color: colors.textMuted }]}>Free</Text>
+            </View>
+          )}
+          {isVerifiedCreator ? (
+            <View style={[styles.rolePill, { backgroundColor: isDark ? '#1C1C1C' : '#EDEAE4' }]}>
+              <Text style={[styles.rolePillText, { color: colors.text }]}>Verified creator</Text>
+            </View>
           ) : null}
         </View>
       </View>
 
-      <SectionLabel>Edit profile</SectionLabel>
-      <TextInput
-        style={[
-          styles.input,
-          {
-            color: colors.text,
-            borderColor: colors.border,
-            backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : colors.surface,
-          },
-        ]}
-        value={name}
-        onChangeText={setName}
-        placeholder="How should we greet you?"
-        placeholderTextColor={colors.textMuted}
-      />
-      <PrimaryButton label="Save profile" onPress={onSave} loading={busy} disabled={busy} />
-      {message ? (
-        <Text style={[styles.message, { color: colors.textMuted }]}>{message}</Text>
-      ) : null}
-
-      <SectionLabel>Account</SectionLabel>
-      {!isCreator ? (
-        <OutlineRow
-          label="Become a Creator"
-          hint="Upload sounds and earn from Premium"
-          icon="mic-outline"
-          onPress={() => navigation.navigate('BecomeCreator')}
+      {/* Stats */}
+      <View style={[styles.statsCard, { backgroundColor: cardBg, borderColor: colors.border }]}>
+        <StatCell
+          icon="musical-notes"
+          iconColor={GOLD}
+          value={String(stats.soundsSaved)}
+          label="Sounds Saved"
+          colors={colors}
         />
-      ) : null}
-      <OutlineRow
-        label="Notifications"
-        hint="Welcome notes and announcements"
-        icon="notifications-outline"
-        onPress={() => navigation.navigate('Notifications')}
-      />
+        <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
+        <StatCell
+          icon="heart"
+          iconColor="#EF4444"
+          value={String(stats.favourites)}
+          label="Favorites"
+          colors={colors}
+        />
+        <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
+        <StatCell
+          icon="arrow-down-circle"
+          iconColor="#22C55E"
+          value={String(stats.downloads)}
+          label="Downloads"
+          colors={colors}
+        />
+        <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
+        <StatCell
+          icon="time"
+          iconColor="#60A5FA"
+          value={`${stats.listeningHours}h`}
+          label="Listening Time"
+          colors={colors}
+        />
+      </View>
 
-      <SectionLabel>Legal</SectionLabel>
-      <OutlineRow
-        label="Privacy Policy"
-        icon="document-text-outline"
-        onPress={() => navigation.navigate('Legal', { doc: 'privacy' })}
-      />
-      <OutlineRow
-        label="Terms of Use"
-        icon="reader-outline"
-        onPress={() => navigation.navigate('Legal', { doc: 'terms' })}
-      />
+      {/* Account */}
+      <SectionTitle>Account</SectionTitle>
+      <View style={[styles.groupCard, { backgroundColor: cardBg, borderColor: colors.border }]}>
+        {!isCreator ? (
+          <MenuRow
+            icon="mic"
+            iconBg={GOLD_SOFT}
+            iconColor={GOLD}
+            label="Become a Creator"
+            hint="Upload sounds and earn from Premium."
+            onPress={() => navigation.navigate('BecomeCreator')}
+            colors={colors}
+            showDivider
+          />
+        ) : (
+          <MenuRow
+            icon="mic"
+            iconBg={GOLD_SOFT}
+            iconColor={GOLD}
+            label="Creator dashboard"
+            hint="Uploads, earnings, and verification."
+            onPress={() => navigation.navigate('Creator')}
+            colors={colors}
+            showDivider
+          />
+        )}
+        <MenuRow
+          icon="notifications"
+          iconBg="rgba(168,85,247,0.16)"
+          iconColor="#A855F7"
+          label="Notifications"
+          hint="Updates, welcome notes and more."
+          onPress={() => navigation.navigate('Notifications')}
+          colors={colors}
+          showDivider
+        />
+        <MenuRow
+          icon="shield-checkmark"
+          iconBg="rgba(34,197,94,0.16)"
+          iconColor="#22C55E"
+          label="Subscription"
+          hint="Manage your Premium plan."
+          onPress={() => navigation.navigate('Premium')}
+          colors={colors}
+          trailing={
+            premiumActive ? (
+              <View style={[styles.activeBadge, { backgroundColor: GOLD_SOFT, borderColor: GOLD }]}>
+                <Text style={[styles.activeBadgeText, { color: GOLD }]}>Active</Text>
+              </View>
+            ) : null
+          }
+        />
+        {isAdmin ? (
+          <MenuRow
+            icon="shield"
+            iconBg="rgba(96,165,250,0.16)"
+            iconColor="#60A5FA"
+            label="Admin hub"
+            hint="Moderation, payments, and queues."
+            onPress={() => navigation.navigate('AdminHub')}
+            colors={colors}
+            showDivider={false}
+            style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }}
+          />
+        ) : null}
+      </View>
+
+      {/* Preferences */}
+      <SectionTitle>Preferences</SectionTitle>
+      <View style={[styles.groupCard, { backgroundColor: cardBg, borderColor: colors.border }]}>
+        <MenuRow
+          icon="moon"
+          iconBg="rgba(59,130,246,0.16)"
+          iconColor="#3B82F6"
+          label="Playback & Downloads"
+          hint="Streaming quality, downloads, and storage."
+          onPress={() => navigation.navigate('Premium')}
+          colors={colors}
+          showDivider
+        />
+        <MenuRow
+          icon="options"
+          iconBg="rgba(20,184,166,0.16)"
+          iconColor="#14B8A6"
+          label="App Preferences"
+          hint="Theme follows your device settings."
+          onPress={() =>
+            Alert.alert(
+              'App Preferences',
+              'Theme currently follows your system appearance. More options coming soon.',
+            )
+          }
+          colors={colors}
+        />
+      </View>
+
+      {/* Legal */}
+      <SectionTitle>Legal</SectionTitle>
+      <View style={[styles.groupCard, { backgroundColor: cardBg, borderColor: colors.border }]}>
+        <MenuRow
+          icon="document-text"
+          iconBg={isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'}
+          iconColor={colors.text}
+          label="Privacy Policy"
+          onPress={() => navigation.navigate('Legal', { doc: 'privacy' })}
+          colors={colors}
+          showDivider
+        />
+        <MenuRow
+          icon="reader"
+          iconBg={isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'}
+          iconColor={colors.text}
+          label="Terms of Use"
+          onPress={() => navigation.navigate('Legal', { doc: 'terms' })}
+          colors={colors}
+        />
+      </View>
 
       <Pressable
-        style={[styles.signOut, { borderColor: colors.border }]}
-        onPress={() => signOut()}
+        style={[styles.signOut, { borderColor: colors.danger === '#FFFFFF' ? '#EF4444' : '#EF4444' }]}
+        onPress={() =>
+          Alert.alert('Sign out', 'Sign out of X-Relax?', [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Sign out', style: 'destructive', onPress: () => void signOut() },
+          ])
+        }
       >
-        <Text style={{ color: colors.text, fontFamily: 'DMSans_700Bold' }}>Sign out</Text>
+        <Ionicons name="log-out-outline" size={18} color="#EF4444" />
+        <Text style={styles.signOutText}>Sign out</Text>
       </Pressable>
+
+      {/* Edit sheet */}
+      <Modal visible={editOpen} transparent animationType="slide" onRequestClose={() => setEditOpen(false)}>
+        <Pressable style={styles.modalBackdrop} onPress={() => setEditOpen(false)}>
+          <Pressable
+            style={[
+              styles.editSheet,
+              {
+                backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF',
+                paddingBottom: insets.bottom + 20,
+              },
+            ]}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <Text style={[styles.editTitle, { color: colors.text }]}>Edit profile</Text>
+            <Pressable onPress={pickAvatar} style={styles.editAvatarRow}>
+              {showRemoteAvatar ? (
+                <Image source={{ uri: avatarSource! }} style={styles.editAvatar} contentFit="cover" />
+              ) : (
+                <View style={[styles.editAvatar, { backgroundColor: '#333', alignItems: 'center', justifyContent: 'center' }]}>
+                  <Text style={{ color: '#fff', fontSize: 22, fontFamily: 'Fraunces_700Bold' }}>
+                    {initial}
+                  </Text>
+                </View>
+              )}
+              <Text style={{ color: GOLD, fontFamily: 'DMSans_500Medium' }}>Change photo</Text>
+            </Pressable>
+            <TextInput
+              value={name}
+              onChangeText={setName}
+              placeholder="Display name"
+              placeholderTextColor={colors.textMuted}
+              style={[
+                styles.editInput,
+                {
+                  color: colors.text,
+                  borderColor: colors.border,
+                  backgroundColor: isDark ? '#2C2C2E' : '#F3F0EA',
+                },
+              ]}
+            />
+            {!profile?.country_code ? (
+              <Text style={{ color: colors.textMuted, fontFamily: 'DMSans_400Regular', fontSize: 12 }}>
+                Country is required for payments and creator analytics.
+              </Text>
+            ) : null}
+            <Text style={{ color: colors.textMuted, fontSize: 12, fontFamily: 'DMSans_500Medium' }}>
+              Country · {countryName(countryCode || profile?.country_code)}
+            </Text>
+            <ScrollView
+              style={{ maxHeight: 140 }}
+              nestedScrollEnabled
+              keyboardShouldPersistTaps="handled"
+            >
+              {COUNTRIES.map((c) => {
+                const selected = countryCode === c.code;
+                return (
+                  <Pressable
+                    key={c.code}
+                    onPress={() => setCountryCode(c.code)}
+                    style={{ paddingVertical: 8 }}
+                  >
+                    <Text
+                      style={{
+                        color: selected ? GOLD : colors.text,
+                        fontFamily: selected ? 'DMSans_700Bold' : 'DMSans_400Regular',
+                      }}
+                    >
+                      {c.name}
+                      {selected ? ' ✓' : ''}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+            <Pressable
+              onPress={() => void onSave()}
+              disabled={busy}
+              style={[styles.saveBtn, { backgroundColor: colors.inverse, opacity: busy ? 0.6 : 1 }]}
+            >
+              <Text style={{ color: colors.inverseText, fontFamily: 'DMSans_700Bold', fontSize: 16 }}>
+                {busy ? 'Saving…' : 'Save'}
+              </Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </ScreenScaffold>
   );
 }
 
-function Badge({
+function SectionTitle({ children }: { children: string }) {
+  const { colors } = useAppTheme();
+  return <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>{children}</Text>;
+}
+
+function StatCell({
+  icon,
+  iconColor,
+  value,
   label,
   colors,
 }: {
+  icon: keyof typeof Ionicons.glyphMap;
+  iconColor: string;
+  value: string;
   label: string;
-  colors: { text: string; border: string };
+  colors: { text: string; textMuted: string };
 }) {
   return (
-    <View style={[styles.badge, { borderColor: colors.border }]}>
-      <Text style={[styles.badgeText, { color: colors.text }]}>{label}</Text>
+    <View style={styles.statCell}>
+      <Ionicons name={icon} size={16} color={iconColor} />
+      <Text style={[styles.statValue, { color: colors.text }]}>{value}</Text>
+      <Text style={[styles.statLabel, { color: colors.textMuted }]} numberOfLines={2}>
+        {label}
+      </Text>
     </View>
   );
 }
 
+function MenuRow({
+  icon,
+  iconBg,
+  iconColor,
+  label,
+  hint,
+  onPress,
+  colors,
+  showDivider,
+  trailing,
+  style,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  iconBg: string;
+  iconColor: string;
+  label: string;
+  hint?: string;
+  onPress: () => void;
+  colors: { text: string; textMuted: string };
+  showDivider?: boolean;
+  trailing?: ReactNode;
+  style?: object;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={[
+        styles.menuRow,
+        showDivider ? { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(128,128,128,0.25)' } : null,
+        style,
+      ]}
+    >
+      <View style={[styles.menuIcon, { backgroundColor: iconBg }]}>
+        <Ionicons name={icon} size={18} color={iconColor} />
+      </View>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={[styles.menuLabel, { color: colors.text }]}>{label}</Text>
+        {hint ? (
+          <Text style={[styles.menuHint, { color: colors.textMuted }]} numberOfLines={2}>
+            {hint}
+          </Text>
+        ) : null}
+      </View>
+      {trailing}
+      <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
-  heroWrap: { alignItems: 'center', paddingHorizontal: 20, marginBottom: 12, marginTop: 4 },
+  gearBtn: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 4,
+  },
+  heroWrap: {
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    marginBottom: 18,
+    marginTop: 4,
+    position: 'relative',
+  },
+  waveBehind: {
+    ...StyleSheet.absoluteFillObject,
+    top: 20,
+    bottom: 40,
+  },
   avatarPress: { marginBottom: 14 },
-  avatar: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
+  avatarRing: {
+    width: 104,
+    height: 104,
+    borderRadius: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 3,
+  },
+  avatarInner: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 50,
+    overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarImage: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
+  avatarImage: { width: '100%', height: '100%' },
+  avatarFallback: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   cameraBtn: {
     position: 'absolute',
-    right: -2,
-    bottom: -2,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    right: 2,
+    bottom: 2,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarMark: {
     fontFamily: 'Fraunces_700Bold',
-    fontSize: 36,
+    fontSize: 40,
     color: 'rgba(255,255,255,0.92)',
   },
-  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  name: { fontFamily: 'Fraunces_600SemiBold', fontSize: 24 },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, maxWidth: '90%' },
+  name: { fontFamily: 'Fraunces_600SemiBold', fontSize: 24, letterSpacing: -0.3 },
   email: { fontFamily: 'DMSans_400Regular', fontSize: 13, marginTop: 4 },
-  badgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 14, justifyContent: 'center' },
-  badge: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+  badgeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 14,
+    justifyContent: 'center',
   },
-  badgeText: {
+  rolePill: {
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  rolePillText: {
+    fontFamily: 'DMSans_500Medium',
+    fontSize: 12,
+  },
+  premiumPill: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  premiumPillText: {
+    fontFamily: 'DMSans_700Bold',
+    fontSize: 12,
+  },
+  statsCard: {
+    marginHorizontal: 16,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row',
+    paddingVertical: 14,
+    paddingHorizontal: 4,
+  },
+  statCell: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 2,
+  },
+  statDivider: { width: StyleSheet.hairlineWidth, alignSelf: 'stretch', marginVertical: 4 },
+  statValue: { fontFamily: 'DMSans_700Bold', fontSize: 16 },
+  statLabel: {
+    fontFamily: 'DMSans_400Regular',
+    fontSize: 10,
+    textAlign: 'center',
+    lineHeight: 13,
+  },
+  sectionTitle: {
     fontFamily: 'DMSans_500Medium',
     fontSize: 11,
-    textTransform: 'capitalize',
-  },
-  input: {
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    marginTop: 22,
+    marginBottom: 10,
     marginHorizontal: 20,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 13,
-    fontFamily: 'DMSans_400Regular',
-    fontSize: 15,
-    marginBottom: 12,
   },
-  message: {
-    textAlign: 'center',
-    marginTop: 10,
-    fontFamily: 'DMSans_400Regular',
-    fontSize: 13,
+  groupCard: {
+    marginHorizontal: 16,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: 'hidden',
+  },
+  menuRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
+  menuIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  menuLabel: { fontFamily: 'DMSans_700Bold', fontSize: 15 },
+  menuHint: { fontFamily: 'DMSans_400Regular', fontSize: 12, marginTop: 2, lineHeight: 16 },
+  activeBadge: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    marginRight: 4,
+  },
+  activeBadgeText: {
+    fontFamily: 'DMSans_700Bold',
+    fontSize: 11,
   },
   signOut: {
-    marginHorizontal: 20,
-    marginTop: 24,
-    borderWidth: StyleSheet.hairlineWidth,
+    marginHorizontal: 16,
+    marginTop: 28,
+    borderWidth: 1,
     borderRadius: 14,
     paddingVertical: 15,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  signOutText: {
+    color: '#EF4444',
+    fontFamily: 'DMSans_700Bold',
+    fontSize: 15,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  editSheet: {
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    gap: 14,
+  },
+  editTitle: { fontFamily: 'Fraunces_700Bold', fontSize: 22 },
+  editAvatarRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  editAvatar: { width: 56, height: 56, borderRadius: 28 },
+  editInput: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontFamily: 'DMSans_400Regular',
+    fontSize: 16,
+  },
+  saveBtn: {
+    borderRadius: 12,
+    paddingVertical: 14,
     alignItems: 'center',
   },
 });

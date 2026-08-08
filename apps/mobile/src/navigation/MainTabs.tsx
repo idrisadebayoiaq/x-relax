@@ -1,14 +1,16 @@
 import { StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import {
+  createBottomTabNavigator,
+  BottomTabBar,
+  type BottomTabBarProps,
+} from '@react-navigation/bottom-tabs';
 import { HomeScreen } from '../features/home/HomeScreen';
 import { SearchScreen } from '../features/library/SearchScreen';
 import { LibraryScreen } from '../features/library/LibraryScreen';
 import { ProfileScreen } from '../features/home/ProfileScreen';
-import { CreatorScreen } from '../features/creator/CreatorScreen';
-import { PremiumScreen } from '../features/premium/PremiumScreen';
 import { useAppTheme } from '../lib/useAppTheme';
-import { useAuth } from '../features/auth/AuthProvider';
+import { MiniPlayer } from './MiniPlayer';
 import type { MainTabParamList } from './types';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -20,17 +22,24 @@ const TAB_ICONS: Record<
   Home: { active: 'home', inactive: 'home-outline' },
   Search: { active: 'search', inactive: 'search-outline' },
   Library: { active: 'library', inactive: 'library-outline' },
-  Premium: { active: 'diamond', inactive: 'diamond-outline' },
-  Creator: { active: 'mic', inactive: 'mic-outline' },
   Profile: { active: 'person', inactive: 'person-outline' },
 };
 
+function TabBarWithPlayer(props: BottomTabBarProps) {
+  return (
+    <View>
+      <MiniPlayer />
+      <BottomTabBar {...props} />
+    </View>
+  );
+}
+
 export function MainTabs() {
   const { colors, isDark } = useAppTheme();
-  const { isCreator } = useAuth();
 
   return (
     <Tab.Navigator
+      tabBar={(props) => <TabBarWithPlayer {...props} />}
       screenOptions={({ route }) => ({
         headerShown: false,
         tabBarStyle: {
@@ -65,8 +74,6 @@ export function MainTabs() {
       <Tab.Screen name="Home" component={HomeScreen} />
       <Tab.Screen name="Search" component={SearchScreen} />
       <Tab.Screen name="Library" component={LibraryScreen} />
-      <Tab.Screen name="Premium" component={PremiumScreen} />
-      {isCreator ? <Tab.Screen name="Creator" component={CreatorScreen} /> : null}
       <Tab.Screen name="Profile" component={ProfileScreen} options={{ title: 'Profile' }} />
     </Tab.Navigator>
   );

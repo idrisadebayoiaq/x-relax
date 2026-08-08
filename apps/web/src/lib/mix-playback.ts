@@ -1,3 +1,4 @@
+import { claimExclusiveWebPlayback, registerExclusiveAudio } from '@/lib/audioSession';
 import type { Sound } from '@/types/database';
 
 export type MixLayer = {
@@ -35,6 +36,8 @@ export async function startMixLayers(layers: MixLayer[]): Promise<MixLayer[]> {
       const audio = new Audio(layer.sound.audio_url);
       audio.loop = true;
       audio.volume = layer.volume;
+      registerExclusiveAudio(audio);
+      claimExclusiveWebPlayback(audio);
       await audio.play();
       started.push({ ...layer, audio });
     } catch {
@@ -46,11 +49,16 @@ export async function startMixLayers(layers: MixLayer[]): Promise<MixLayer[]> {
 
 export function pauseMixLayers(layers: MixLayer[]) {
   layers.forEach((layer) => layer.audio?.pause());
+  const first = layers.find((l) => l.audio)?.audio;
+  if (first) claimExclusiveWebPlayback(first);
 }
 
 export function resumeMixLayers(layers: MixLayer[]) {
   layers.forEach((layer) => {
-    if (layer.audio?.paused) void layer.audio.play();
+    if (layer.audio?.paused) {
+      claimExclusiveWebPlayback(layer.audio);
+      void layer.audio.play();
+    }
   });
 }
 

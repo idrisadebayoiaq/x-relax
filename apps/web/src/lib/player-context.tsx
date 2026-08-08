@@ -19,6 +19,11 @@ import {
 } from '@/lib/daily-listen-limit';
 import { getOfflineAudioUrl, isOnline } from '@/lib/offline-storage';
 import { stopExternalMixPlayback } from '@/lib/mix-playback';
+import {
+  claimExclusiveWebPlayback,
+  registerExclusiveAudio,
+  releaseWebPlaybackToPaused,
+} from '@/lib/audioSession';
 import { useAuth } from '@/lib/auth-context';
 import type { Sound } from '@/types/database';
 
@@ -262,10 +267,13 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       audio.playbackRate = rate;
       bindAudio(audio, sound);
       audioRef.current = audio;
+      registerExclusiveAudio(audio);
+      claimExclusiveWebPlayback(audio);
       setCurrent(sound);
 
       try {
         await audio.play();
+        claimExclusiveWebPlayback(audio);
       } catch {
         return false;
       }
@@ -406,10 +414,14 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     if (!audio) return;
     if (audio.paused) {
       flushPlayCount();
+      claimExclusiveWebPlayback(audio);
       await audio.play();
     } else {
       flushPlayCount();
       audio.pause();
+      // Keep session claimed as paused so other in-tab media is not revived.
+      releaseWebPlaybackToPaused();
+      claimExclusiveWebPlayback(audio);
     }
   }, [flushPlayCount]);
 
@@ -433,12 +445,22 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   const toggleLoop = useCallback(() => {
     if (sleepEndsAtRef.current) return;
+    if (!isPremium) return;
     const next = !isLooping;
     setIsLooping(next);
     isLoopingRef.current = next;
     const audio = audioRef.current;
     if (audio) audio.loop = next;
-  }, [isLooping]);
+  }, [isLooping, isPremium]);
+
+  useEffect(() => {
+    if (!isPremium && isLooping) {
+      setIsLooping(false);
+      isLoopingRef.current = false;
+      const audio = audioRef.current;
+      if (audio && !sleepEndsAtRef.current) audio.loop = false;
+    }
+  }, [isPremium, isLooping]);
 
   const setSleepTimerMinutes = useCallback(
     (minutes: number | null) => {

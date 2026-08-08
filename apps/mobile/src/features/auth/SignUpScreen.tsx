@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAppTheme } from '../../lib/useAppTheme';
 import { useAuth } from './AuthProvider';
+import { COUNTRIES } from '../../lib/countries';
 import { PrimaryButton } from '../../ui/Screen';
 import type { AuthStackParamList } from '../../navigation/types';
 import type { SignupRole } from '../../types/database';
@@ -29,6 +30,8 @@ export function SignUpScreen({ navigation }: Props) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<SignupRole>('listener');
+  const [countryCode, setCountryCode] = useState('');
+  const [showCountries, setShowCountries] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -40,12 +43,16 @@ export function SignUpScreen({ navigation }: Props) {
       setError('Display name is required');
       return;
     }
+    if (!countryCode) {
+      setError('Please select your country');
+      return;
+    }
     if (password.length < 6) {
       setError('Password must be at least 6 characters');
       return;
     }
     setBusy(true);
-    const result = await signUp({ email, password, displayName, role });
+    const result = await signUp({ email, password, displayName, role, countryCode });
     setBusy(false);
     if (result.error) {
       setError(result.error);
@@ -148,6 +155,60 @@ export function SignUpScreen({ navigation }: Props) {
             />
           </View>
 
+          <Text style={[styles.label, { color: colors.textMuted }]}>Country</Text>
+          <Pressable
+            onPress={() => setShowCountries((v) => !v)}
+            style={[
+              styles.field,
+              {
+                borderColor: colors.border,
+                backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : colors.surface,
+              },
+            ]}
+          >
+            <Ionicons name="globe-outline" size={18} color={colors.textMuted} />
+            <Text
+              style={[
+                styles.fieldInput,
+                { color: countryCode ? colors.text : colors.textMuted, paddingVertical: 12 },
+              ]}
+            >
+              {COUNTRIES.find((c) => c.code === countryCode)?.name ?? 'Select your country'}
+            </Text>
+            <Ionicons
+              name={showCountries ? 'chevron-up' : 'chevron-down'}
+              size={16}
+              color={colors.textMuted}
+            />
+          </Pressable>
+          {showCountries ? (
+            <ScrollView
+              nestedScrollEnabled
+              style={[
+                styles.countryList,
+                {
+                  borderColor: colors.border,
+                  backgroundColor: isDark ? '#1A1410' : colors.surface,
+                },
+              ]}
+            >
+              {COUNTRIES.map((c) => (
+                <Pressable
+                  key={c.code}
+                  onPress={() => {
+                    setCountryCode(c.code);
+                    setShowCountries(false);
+                  }}
+                  style={styles.countryRow}
+                >
+                  <Text style={{ color: colors.text, fontFamily: 'DMSans_400Regular', fontSize: 14 }}>
+                    {c.name}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          ) : null}
+
           {error ? <Text style={[styles.message, { color: colors.text }]}>{error}</Text> : null}
           {info ? <Text style={[styles.message, { color: colors.textMuted }]}>{info}</Text> : null}
 
@@ -228,5 +289,18 @@ const styles = StyleSheet.create({
   link: {
     fontFamily: 'DMSans_400Regular',
     fontSize: 14,
+  },
+  countryList: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 14,
+    marginBottom: 12,
+    maxHeight: 180,
+    overflow: 'hidden',
+  },
+  countryRow: {
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(128,128,128,0.25)',
   },
 });

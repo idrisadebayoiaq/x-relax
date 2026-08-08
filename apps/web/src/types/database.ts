@@ -17,6 +17,7 @@ export type Profile = {
   id: string;
   display_name: string | null;
   avatar_url: string | null;
+  country_code: string | null;
   role: UserRole;
   premium_status: PremiumStatus;
   theme_preference: ThemePreference;
@@ -37,6 +38,10 @@ export type CreatorProfile = {
   is_verified: boolean;
   can_earn?: boolean;
   has_blue_badge?: boolean;
+  banner_url?: string | null;
+  monthly_listeners?: number;
+  follower_count?: number;
+  display_name?: string | null;
 };
 
 export type Category = {
@@ -76,6 +81,9 @@ export type Playlist = {
   title: string;
   description: string | null;
   is_favourite: boolean;
+  visibility?: 'private' | 'public';
+  cover_url?: string | null;
+  item_count?: number;
   created_at: string;
   updated_at: string;
 };

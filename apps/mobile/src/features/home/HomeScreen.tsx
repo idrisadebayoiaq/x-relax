@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
-  Dimensions,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -16,30 +15,39 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { CompositeNavigationProp } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '../../lib/useAppTheme';
 import { supabase } from '../../lib/supabase';
-import { formatDuration, moodPaletteFor } from '../../lib/format';
+import { formatDuration } from '../../lib/format';
 import { getDailyPlayStatus } from '../../lib/dailyListenLimit';
-import { buildPersonalizedRecommended, categoriesWithSounds } from '../../lib/recommendations';
-import { buildCategoryRails, CATEGORY_ICONS } from '../../lib/categoryRails';
+import {
+  buildNewReleasesFromFollows,
+  buildPersonalizedRecommended,
+  categoriesWithSounds,
+  followCountryBias,
+} from '../../lib/recommendations';
+import { CATEGORY_ICONS } from '../../lib/categoryRails';
 import { useAuth } from '../auth/AuthProvider';
 import { usePlayer } from '../player/PlayerProvider';
 import { WelcomeBanner } from './WelcomeBanner';
+import { ListeningTipBanner } from './ListeningTipBanner';
 import { CoverArt } from './CoverArt';
-import { CategoryCard, SoundCard } from '../../ui/Cards';
-import { Icon } from '../../ui/Icon';
+import { SoundCard } from '../../ui/Cards';
 import { VerifiedBadge } from '../../ui/VerifiedBadge';
-import { Ionicons } from '@expo/vector-icons';
-import type { Sound } from '../../types/database';
+import { AppMenu } from '../../navigation/AppMenu';
+import { loadSuggestedPlaylists } from '../../lib/playlistSuggestions';
+import { moodPaletteFor } from '../../lib/format';
+import type { Playlist, Sound } from '../../types/database';
 import type { MainTabParamList, RootStackParamList } from '../../navigation/types';
+import { Image } from 'expo-image';
 
 type Section = {
   key: string;
   title: string;
   subtitle?: string;
   data: Sound[];
-  icon?: keyof typeof Ionicons.glyphMap;
 };
+
 type CategoryRow = {
   id: string;
   name: string;
@@ -47,6 +55,11 @@ type CategoryRow = {
   cover_url?: string | null;
   created_by?: string | null;
   sort_order?: number | null;
+};
+
+type ContinueItem = {
+  sound: Sound;
+  progressSeconds: number;
 };
 
 const CATALOG_SLUGS = new Set([
@@ -59,7 +72,6 @@ const CATALOG_SLUGS = new Set([
   'forest',
   'healing',
   'meditation',
-  'mixes',
   'nature',
   'ocean',
   'rain',
@@ -70,24 +82,63 @@ const CATALOG_SLUGS = new Set([
   'thunder',
   'wind',
 ]);
+
+const HOME_CAT_PRIORITY = [
+  'nature',
+  'sleep',
+  'meditation',
+  'focus',
+  'rain',
+  'ocean',
+  'asmr',
+  'relaxation',
+];
+
 type HomeNavigation = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, 'Home'>,
   NativeStackNavigationProp<RootStackParamList>
 >;
 
-const { width: SCREEN_W } = Dimensions.get('window');
-const HERO_H = Math.min(360, SCREEN_W * 0.92);
+function formatPlaysShort(count: number | null | undefined): string {
+  const n = Number(count ?? 0);
+  if (!Number.isFinite(n) || n <= 0) return '0';
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return `${Math.floor(n)}`;
+}
+
+function pickHomeCategories(cats: CategoryRow[], limit = 5): CategoryRow[] {
+  const bySlug = new Map(cats.map((c) => [c.slug, c]));
+  const picked: CategoryRow[] = [];
+  const used = new Set<string>();
+  for (const slug of HOME_CAT_PRIORITY) {
+    const cat = bySlug.get(slug);
+    if (!cat || used.has(cat.id)) continue;
+    picked.push(cat);
+    used.add(cat.id);
+    if (picked.length >= limit) return picked;
+  }
+  for (const cat of cats) {
+    if (used.has(cat.id)) continue;
+    picked.push(cat);
+    used.add(cat.id);
+    if (picked.length >= limit) break;
+  }
+  return picked;
+}
 
 export function HomeScreen() {
   const { colors, isDark } = useAppTheme();
   const insets = useSafeAreaInsets();
   const { profile, user, isPremium, hasUnlimitedListening } = useAuth();
-  const { playSound, current, isPlaying, togglePlay } = usePlayer();
+  const { playSound, toggleFavourite, isFavourite, current } = usePlayer();
   const navigation = useNavigation<HomeNavigation>();
 
   const [sections, setSections] = useState<Section[]>([]);
+  const [continueItems, setContinueItems] = useState<ContinueItem[]>([]);
   const [categories, setCategories] = useState<CategoryRow[]>([]);
-  const [daily, setDaily] = useState<Sound | null>(null);
+  const [trending, setTrending] = useState<Sound[]>([]);
+  const [suggestedPlaylists, setSuggestedPlaylists] = useState<Playlist[]>([]);
   const [catalogCount, setCatalogCount] = useState(0);
   const [dailyPlays, setDailyPlays] = useState<{ played: number; remaining: number; limit: number } | null>(
     null,
@@ -95,8 +146,8 @@ export function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
   const fade = useRef(new Animated.Value(0)).current;
-  const heroLift = useRef(new Animated.Value(18)).current;
 
   const load = useCallback(async () => {
     setLoadError(null);
@@ -106,80 +157,122 @@ export function HomeScreen() {
         { data: cats },
         { data: history },
         { data: preferenceHistory },
-        { data: dailySetting },
+        { data: favourites },
         { data: recommendedSetting },
         { data: categoryLinks },
-      ] =
-        await Promise.all([
-          supabase
-            .from('sounds')
-            .select('*')
-            .eq('status', 'published')
-            .order('created_at', { ascending: false }),
-          supabase
-            .from('categories')
-            .select('id, name, slug, cover_url, created_by, sort_order')
-            .is('parent_id', null)
-            .order('sort_order'),
-          user
-            ? supabase
-                .from('listening_history')
-                .select('sound_id, progress_seconds, completed, played_at, sound:sounds(*)')
-                .eq('user_id', user.id)
-                .order('played_at', { ascending: false })
-                .limit(12)
-            : Promise.resolve({ data: [] as any[] }),
-          user
-            ? supabase
-                .from('listening_history')
-                .select('sound_id')
-                .eq('user_id', user.id)
-                .order('played_at', { ascending: false })
-                .limit(80)
-            : Promise.resolve({ data: [] as any[] }),
-          supabase
-            .from('app_settings')
-            .select('value')
-            .eq('key', 'daily_pick_sound_id')
-            .maybeSingle(),
-          supabase
-            .from('app_settings')
-            .select('value')
-            .eq('key', 'recommended_sound_ids')
-            .maybeSingle(),
-          supabase.from('sound_categories').select('sound_id, category_id'),
-        ]);
+        { data: follows },
+      ] = await Promise.all([
+        supabase
+          .from('sounds')
+          .select('*')
+          .eq('status', 'published')
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('categories')
+          .select('id, name, slug, cover_url, created_by, sort_order')
+          .is('parent_id', null)
+          .order('sort_order'),
+        user
+          ? supabase
+              .from('listening_history')
+              .select('sound_id, progress_seconds, completed, played_at, sound:sounds(*)')
+              .eq('user_id', user.id)
+              .order('played_at', { ascending: false })
+              .limit(12)
+          : Promise.resolve({ data: [] as any[] }),
+        user
+          ? supabase
+              .from('listening_history')
+              .select('sound_id')
+              .eq('user_id', user.id)
+              .order('played_at', { ascending: false })
+              .limit(80)
+          : Promise.resolve({ data: [] as any[] }),
+        user
+          ? supabase
+              .from('favourites')
+              .select('sound_id, created_at')
+              .eq('user_id', user.id)
+              .order('created_at', { ascending: false })
+              .limit(80)
+          : Promise.resolve({ data: [] as { sound_id: string }[] }),
+        supabase
+          .from('app_settings')
+          .select('value')
+          .eq('key', 'recommended_sound_ids')
+          .maybeSingle(),
+        supabase.from('sound_categories').select('sound_id, category_id'),
+        user
+          ? supabase.from('creator_follows').select('creator_id').eq('follower_id', user.id)
+          : Promise.resolve({ data: [] as { creator_id: string }[] }),
+      ]);
 
       if (soundsErr) throw new Error(soundsErr.message);
 
       const all = (published as Sound[]) ?? [];
       setCatalogCount(all.length);
 
-      const dailyPickId = (() => {
-        const raw = dailySetting?.value;
-        if (typeof raw === 'string') return raw.replace(/^"|"$/g, '');
-        if (raw == null) return '';
-        return String(raw).replace(/^"|"$/g, '');
-      })();
-
       const recommendedIds: string[] = Array.isArray(recommendedSetting?.value)
         ? (recommendedSetting?.value as string[])
         : [];
 
-      const continueListening = ((history as any[]) ?? [])
+      const continueRaw = ((history as any[]) ?? [])
         .filter((h) => !h.completed && h.sound)
-        .map((h) => h.sound as Sound);
-      const trending = [...all].sort((a, b) => b.play_count - a.play_count).slice(0, 12);
+        .map((h) => ({
+          sound: h.sound as Sound,
+          progressSeconds: Number(h.progress_seconds ?? 0),
+        }));
+      setContinueItems(continueRaw);
+
+      const trendingSorted = [...all].sort((a, b) => b.play_count - a.play_count);
+      setTrending(trendingSorted.slice(0, 10));
+
       const featured = all.filter((s) => s.is_featured);
       const links = (categoryLinks as { sound_id: string; category_id: string }[]) ?? [];
       const recentHistorySoundIds = [
-        ...new Set(((preferenceHistory as { sound_id: string }[]) ?? []).map((h) => h.sound_id).filter(Boolean)),
+        ...new Set(
+          ((preferenceHistory as { sound_id: string }[]) ?? []).map((h) => h.sound_id).filter(Boolean),
+        ),
       ];
+      const likedSoundIds = [
+        ...new Set(
+          ((favourites as { sound_id: string }[]) ?? []).map((f) => f.sound_id).filter(Boolean),
+        ),
+      ];
+      const followedCreatorIds = [
+        ...new Set(
+          ((follows as { creator_id: string }[]) ?? []).map((f) => f.creator_id).filter(Boolean),
+        ),
+      ];
+      const creatorIds = [
+        ...new Set(
+          all.map((s) => s.creator_id).filter(Boolean).concat(followedCreatorIds) as string[],
+        ),
+      ];
+      const creatorCountries: Record<string, string | null> = {};
+      if (creatorIds.length) {
+        const { data: creatorProfiles } = await supabase
+          .from('profiles')
+          .select('id, country_code')
+          .in('id', creatorIds);
+        for (const row of (creatorProfiles as { id: string; country_code: string | null }[]) ?? []) {
+          creatorCountries[row.id] = row.country_code;
+        }
+      }
+      const bias = followCountryBias(followedCreatorIds.map((id) => creatorCountries[id]));
       const recommended = buildPersonalizedRecommended({
         all,
         categoryLinks: links,
         recentHistorySoundIds,
+        likedSoundIds,
         adminRecommendedIds: recommendedIds,
+        creatorCountries,
+        followBias: bias,
+        limit: 12,
+      });
+      const newReleases = buildNewReleasesFromFollows({
+        all,
+        followedCreatorIds,
         limit: 12,
       });
 
@@ -189,63 +282,46 @@ export function HomeScreen() {
       const browseCats = withSounds.filter(
         (c) => CATALOG_SLUGS.has(c.slug) || Boolean(c.cover_url) || Boolean(c.created_by),
       );
-      const categoryRails = buildCategoryRails({
-        categories: browseCats,
-        categoryLinks: links,
-        sounds: all,
-        limitPerCategory: 12,
-      });
+      setCategories(browseCats);
 
-      const dailySound =
-        (dailyPickId ? all.find((s) => s.id === dailyPickId) : undefined) ??
-        featured[0] ??
-        trending[0] ??
-        all[0] ??
-        null;
-
-      setDaily(dailySound);
+      const recommendedSubtitle = bias
+        ? bias === 'NG'
+          ? 'Weighted toward creators you follow in Nigeria'
+          : 'Weighted toward creators you follow internationally'
+        : likedSoundIds.length
+          ? recentHistorySoundIds.length
+            ? 'Based on likes and listening'
+            : 'Based on sounds you like'
+          : recentHistorySoundIds.length
+            ? 'Based on what you listen to most'
+            : 'Picks to start your calm library';
 
       const next = (
         [
           {
-            key: 'continue',
-            title: 'Continue listening',
-            subtitle: 'Pick up where you left off',
-            data: continueListening,
-            icon: 'play-forward-outline',
+            key: 'new_releases',
+            title: 'New Release',
+            subtitle: 'From creators you follow',
+            data: newReleases,
           },
           {
             key: 'featured',
             title: 'Featured for you',
             subtitle: 'Curated calm',
             data: featured.slice(0, 12),
-            icon: 'star-outline',
           },
           {
             key: 'recommended',
-            title: 'Recommended',
-            subtitle: recentHistorySoundIds.length
-              ? 'Based on what you listen to most'
-              : 'Picks to start your calm library',
+            title: 'Recommended for you',
+            subtitle: recommendedSubtitle,
             data: recommended,
-            icon: 'sparkles-outline',
           },
-          {
-            key: 'trending',
-            title: 'Trending now',
-            data: trending,
-            icon: 'trending-up-outline',
-          },
-          ...categoryRails.map((rail) => ({
-            ...rail,
-            icon: (CATEGORY_ICONS[rail.key.replace(/^cat-/, '')] ??
-              'musical-notes-outline') as keyof typeof Ionicons.glyphMap,
-          })),
         ] as Section[]
       ).filter((s) => s.data.length > 0);
 
       setSections(next);
-      setCategories(browseCats);
+      const suggested = await loadSuggestedPlaylists({ userId: user?.id, limit: 12 });
+      setSuggestedPlaylists(suggested);
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : 'Could not load home');
     } finally {
@@ -269,27 +345,13 @@ export function HomeScreen() {
 
   useEffect(() => {
     if (loading) return;
-    Animated.parallel([
-      Animated.timing(fade, { toValue: 1, duration: 520, useNativeDriver: true }),
-      Animated.spring(heroLift, { toValue: 0, friction: 9, tension: 60, useNativeDriver: true }),
-    ]).start();
-  }, [loading, fade, heroLift]);
+    Animated.timing(fade, { toValue: 1, duration: 520, useNativeDriver: true }).start();
+  }, [loading, fade]);
 
-  const catalogSounds = useMemo(() => {
-    const seen = new Set<string>();
-    const items: Sound[] = [];
-    for (const section of sections) {
-      for (const sound of section.data) {
-        if (seen.has(sound.id)) continue;
-        seen.add(sound.id);
-        items.push(sound);
-      }
-    }
-    return items;
-  }, [sections]);
+  const homeCategories = useMemo(() => pickHomeCategories(categories, 5), [categories]);
 
   const openSound = async (sound: Sound, queue?: Sound[], queueLabel?: string) => {
-    const playableQueue = queue ?? (catalogSounds.length ? catalogSounds : [sound]);
+    const playableQueue = queue ?? [sound];
     const index = playableQueue.findIndex((item) => item.id === sound.id);
     const started = await playSound(sound, {
       queue: playableQueue,
@@ -309,13 +371,11 @@ export function HomeScreen() {
     navigation.navigate('Search', query ? { query } : undefined);
   };
 
-  const firstName = useMemo(() => {
+  const displayName = useMemo(() => {
     const raw = profile?.display_name?.trim();
-    if (!raw) return 'listener';
+    if (!raw) return 'Listener';
     return raw.split(/\s+/)[0];
   }, [profile?.display_name]);
-
-  const heroColors = daily ? moodPaletteFor(daily.title) : (['#0B1C1D', '#1A2E2F'] as [string, string]);
 
   if (loading) {
     return (
@@ -328,20 +388,20 @@ export function HomeScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       <LinearGradient
-        colors={
-          isDark
-            ? ['#0A1214', '#000000', '#000000']
-            : ['#F3F0EA', '#FFFFFF', '#FFFFFF']
-        }
+        colors={isDark ? ['#0A1214', '#000000', '#000000'] : ['#F3F0EA', '#FFFFFF', '#FFFFFF']}
         locations={[0, 0.35, 1]}
         style={StyleSheet.absoluteFill}
       />
 
+      <AppMenu visible={menuOpen} onClose={() => setMenuOpen(false)} />
+      <WelcomeBanner />
+      <ListeningTipBanner />
+
       <ScrollView
         style={{ flex: 1 }}
         contentContainerStyle={{
-          paddingTop: insets.top + 12,
-          paddingBottom: current ? 110 : 36,
+          paddingTop: insets.top + 8,
+          paddingBottom: current ? 24 : 36,
         }}
         refreshControl={
           <RefreshControl
@@ -355,8 +415,6 @@ export function HomeScreen() {
         }
         showsVerticalScrollIndicator={false}
       >
-        <WelcomeBanner />
-
         {!hasUnlimitedListening && dailyPlays ? (
           <View style={[styles.limitBanner, { borderColor: colors.border, marginHorizontal: 20 }]}>
             <Text style={[styles.limitTitle, { color: colors.text }]}>
@@ -372,185 +430,165 @@ export function HomeScreen() {
           </View>
         ) : null}
 
-        <Animated.View style={{ opacity: fade, paddingHorizontal: 20 }}>
+        {/* Header */}
+        <Animated.View style={{ opacity: fade, paddingHorizontal: 16 }}>
           <View style={styles.topRow}>
-            <View>
-              <Text style={[styles.brand, { color: colors.text }]}>X-Relax</Text>
-              <View style={styles.helloRow}>
-                <Text style={[styles.hello, { color: colors.textMuted }]}>
-                  Good {greetingHour()}, {firstName}
-                </Text>
-                {isPremium ? <VerifiedBadge size={14} tone="white" /> : null}
-              </View>
-            </View>
-            <View style={styles.topActions}>
-              {isPremium ? (
-                <View style={[styles.passPill, { borderColor: colors.border }]}>
-                  <Text style={[styles.passText, { color: colors.text }]}>Premium</Text>
-                </View>
-              ) : null}
-              <Pressable
-                onPress={() => openSearch()}
-                hitSlop={12}
-                style={[styles.iconBtn, { borderColor: colors.border }]}
-              >
-                <Icon name="search-outline" size={18} color={colors.text} />
-              </Pressable>
-              <Pressable
-                onPress={() => navigation.navigate('Notifications')}
-                hitSlop={12}
-                style={[styles.iconBtn, { borderColor: colors.border }]}
-              >
-                <Icon name="notifications-outline" size={18} color={colors.text} />
-              </Pressable>
-            </View>
-          </View>
-        </Animated.View>
-
-        {/* Hero daily pick */}
-        <Animated.View
-          style={{
-            opacity: fade,
-            transform: [{ translateY: heroLift }],
-            marginTop: 22,
-            paddingHorizontal: 20,
-          }}
-        >
-          {daily ? (
-            <Pressable
-              onPress={() =>
-                openSound(
-                  daily,
-                  daily ? [daily, ...catalogSounds.filter((s) => s.id !== daily.id)] : undefined,
-                  "Today's pick",
-                )
-              }
-              style={styles.heroPress}
-            >
-              <View style={[styles.hero, { height: HERO_H }]}>
-                {daily.cover_url ? (
-                  <CoverArt
-                    title={daily.title}
-                    uri={daily.cover_url}
-                    size={SCREEN_W - 40}
-                    rounded={0}
-                    style={{ width: '100%', height: '100%', borderRadius: 22 }}
-                  />
-                ) : (
-                  <LinearGradient
-                    colors={[heroColors[0], heroColors[1], '#050505']}
-                    locations={[0, 0.55, 1]}
-                    start={{ x: 0.15, y: 0 }}
-                    end={{ x: 0.9, y: 1 }}
-                    style={StyleSheet.absoluteFill}
-                  />
-                )}
-                <LinearGradient
-                  colors={['transparent', 'rgba(0,0,0,0.15)', 'rgba(0,0,0,0.88)']}
-                  locations={[0.35, 0.62, 1]}
-                  style={StyleSheet.absoluteFill}
-                />
-                <View style={styles.heroCopy}>
-                  <Text style={styles.heroEyebrow}>Today’s pick</Text>
-                  <Text style={styles.heroTitle} numberOfLines={2}>
-                    {daily.title}
-                  </Text>
-                  <Text style={styles.heroMeta}>
-                    {formatDuration(daily.duration_seconds)}
-                  </Text>
-                  <View style={styles.heroCtaRow}>
-                    <View style={styles.playCta}>
-                      <Icon name="play" size={14} color="#0A0A0A" />
-                      <Text style={styles.playCtaText}>Play</Text>
-                    </View>
-                    <Text style={styles.heroHint}>Unwind in one tap</Text>
-                  </View>
-                </View>
-              </View>
+            <Pressable onPress={() => setMenuOpen(true)} hitSlop={12} style={styles.iconHit}>
+              <Ionicons name="menu" size={24} color={colors.text} />
             </Pressable>
-          ) : (
-            <View style={[styles.emptyHero, { borderColor: colors.border }]}>
-              <Text style={[styles.emptyTitle, { color: colors.text }]}>Your calm space</Text>
-              <Text style={[styles.emptyBody, { color: colors.textMuted }]}>
-                {loadError
-                  ? loadError
-                  : 'Published sounds will appear here. Pull to refresh if you just installed.'}
+            <View style={styles.greetingBlock}>
+              <Text style={[styles.greeting, { color: colors.text }]}>
+                Good {greetingHour()}
               </Text>
-              <Pressable
-                onPress={() => openSearch()}
-                style={[styles.playCta, { backgroundColor: colors.inverse }]}
-              >
-                <Text style={[styles.playCtaText, { color: colors.inverseText }]}>Browse library</Text>
-              </Pressable>
-            </View>
-          )}
-        </Animated.View>
-
-        {/* Moods / categories */}
-        <Animated.View style={{ opacity: fade, marginTop: 28 }}>
-          <View style={styles.sectionHead}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Icon name="grid-outline" size={18} color={colors.textMuted} />
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Categories</Text>
-            </View>
-            <Text style={[styles.sectionSub, { color: colors.textMuted }]}>
-              {categories.length
-                ? `${categories.length} categories · tap to open`
-                : catalogCount
-                  ? `${catalogCount} sounds ready`
-                  : 'Find your frequency'}
-            </Text>
-          </View>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.moodRow}
-          >
-            {categories.length ? (
-              categories.map((c) => (
-                <CategoryCard
-                  key={c.id}
-                  name={c.name}
-                  slug={c.slug}
-                  coverUrl={c.cover_url}
-                  onPress={() =>
-                    navigation.navigate('CategoryDetail', {
-                      categoryId: c.id,
-                      name: c.name,
-                    })
-                  }
-                />
-              ))
-            ) : (
-              <Text style={[styles.emptyBody, { color: colors.textMuted, paddingHorizontal: 20 }]}>
-                Categories will show once synced.
-              </Text>
-            )}
-          </ScrollView>
-        </Animated.View>
-
-        {/* Rails */}
-        {sections.map((section) => (
-          <Animated.View key={section.key} style={{ opacity: fade, marginTop: 28 }}>
-            <View style={styles.sectionHead}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Icon
-                  name={section.icon ?? 'musical-notes-outline'}
-                  size={18}
-                  color={colors.textMuted}
-                />
-                <Text style={[styles.sectionTitle, { color: colors.text }]}>{section.title}</Text>
-              </View>
-              {section.subtitle ? (
-                <Text style={[styles.sectionSub, { color: colors.textMuted }]}>
-                  {section.subtitle}
+              <View style={styles.nameRow}>
+                <Text style={[styles.userName, { color: colors.text }]} numberOfLines={1}>
+                  {displayName}
                 </Text>
-              ) : null}
+                {isPremium ? <VerifiedBadge size={16} tone="white" /> : null}
+              </View>
             </View>
+            <Pressable
+              onPress={() => navigation.navigate('Notifications')}
+              hitSlop={12}
+              style={styles.iconHit}
+            >
+              <Ionicons name="notifications-outline" size={22} color={colors.text} />
+            </Pressable>
+          </View>
+
+          {/* Search */}
+          <Pressable
+            onPress={() => openSearch()}
+            style={[styles.searchBar, { backgroundColor: isDark ? '#1A1A1A' : colors.surface, borderColor: colors.border }]}
+          >
+            <Ionicons name="search" size={18} color={colors.textMuted} />
+            <Text style={[styles.searchPlaceholder, { color: colors.textMuted }]} numberOfLines={1}>
+              Search sounds, moods, or creators...
+            </Text>
+          </Pressable>
+        </Animated.View>
+
+        {loadError || (!sections.length && !continueItems.length && !trending.length && !catalogCount) ? (
+          <View style={[styles.emptyHero, { borderColor: colors.border, marginHorizontal: 20, marginTop: 20 }]}>
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>Your calm space</Text>
+            <Text style={[styles.emptyBody, { color: colors.textMuted }]}>
+              {loadError
+                ? loadError
+                : 'Published sounds will appear here. Pull to refresh if you just installed.'}
+            </Text>
+            <Pressable
+              onPress={() => openSearch()}
+              style={[styles.playCta, { backgroundColor: colors.inverse }]}
+            >
+              <Text style={[styles.playCtaText, { color: colors.inverseText }]}>Browse library</Text>
+            </Pressable>
+          </View>
+        ) : null}
+
+        {/* Continue listening */}
+        {continueItems.length ? (
+          <Animated.View style={{ opacity: fade, marginTop: 26 }}>
+            <SectionHeader
+              title="Continue listening"
+              onSeeAll={() => openSearch()}
+              colors={colors}
+            />
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.rail}
+              contentContainerStyle={styles.railPad}
+              decelerationRate="fast"
+            >
+              {continueItems.slice(0, 8).map((item) => {
+                const duration = Number(item.sound.duration_seconds ?? 0);
+                const progress = Math.min(
+                  1,
+                  duration > 0 ? item.progressSeconds / duration : 0,
+                );
+                return (
+                  <Pressable
+                    key={item.sound.id}
+                    onPress={() =>
+                      void openSound(
+                        item.sound,
+                        continueItems.map((c) => c.sound),
+                        'Continue listening',
+                      )
+                    }
+                    style={[
+                      styles.continueCard,
+                      { backgroundColor: isDark ? '#141414' : colors.surface, borderColor: colors.border },
+                    ]}
+                  >
+                    <View style={styles.continueArt}>
+                      <CoverArt
+                        title={item.sound.title}
+                        uri={item.sound.cover_url}
+                        size={72}
+                        rounded={12}
+                      />
+                      <View style={styles.continuePlay}>
+                        <Ionicons name="play" size={14} color="#0A0A0A" />
+                      </View>
+                    </View>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={[styles.continueTitle, { color: colors.text }]} numberOfLines={1}>
+                        {item.sound.title}
+                      </Text>
+                      <Text style={[styles.continueMeta, { color: colors.textMuted }]} numberOfLines={1}>
+                        {formatDuration(item.sound.duration_seconds) || 'Sound'}
+                      </Text>
+                      <View style={[styles.progressTrack, { backgroundColor: isDark ? '#2A2A2A' : '#E5E5E5' }]}>
+                        <View
+                          style={[
+                            styles.progressFill,
+                            { width: `${Math.max(4, progress * 100)}%`, backgroundColor: colors.text },
+                          ]}
+                        />
+                      </View>
+                      <Text style={[styles.progressTimes, { color: colors.textMuted }]}>
+                        {formatDuration(item.progressSeconds) || '0:00'}
+                        {duration ? ` / ${formatDuration(duration)}` : ''}
+                      </Text>
+                    </View>
+                    <Pressable
+                      onPress={() => {
+                        if (current?.id === item.sound.id) void toggleFavourite();
+                      }}
+                      hitSlop={10}
+                      style={styles.heartHit}
+                    >
+                      <Ionicons
+                        name={current?.id === item.sound.id && isFavourite ? 'heart' : 'heart-outline'}
+                        size={18}
+                        color={colors.textMuted}
+                      />
+                    </Pressable>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </Animated.View>
+        ) : null}
+
+        {/* Featured + Recommended rails */}
+        {sections.map((section) => (
+          <Animated.View key={section.key} style={{ opacity: fade, marginTop: 26 }}>
+            <SectionHeader
+              title={section.title}
+              onSeeAll={
+                section.key === 'recommended' ||
+                section.key === 'featured' ||
+                section.key === 'new_releases'
+                  ? () => openSearch()
+                  : undefined
+              }
+              colors={colors}
+            />
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.railPad}
               decelerationRate="fast"
             >
               {section.data.map((item) => (
@@ -565,71 +603,172 @@ export function HomeScreen() {
           </Animated.View>
         ))}
 
-        <Animated.View style={{ opacity: fade, marginTop: 28, paddingHorizontal: 20 }}>
+        {/* Playlists for you */}
+        {suggestedPlaylists.length ? (
+          <Animated.View style={{ opacity: fade, marginTop: 26 }}>
+            <SectionHeader
+              title="Playlists for you"
+              onSeeAll={() => navigation.navigate('PlaylistsList')}
+              colors={colors}
+            />
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.railPad}
+              decelerationRate="fast"
+            >
+              {suggestedPlaylists.map((pl) => {
+                const [a, b] = moodPaletteFor(pl.title);
+                return (
+                  <Pressable
+                    key={pl.id}
+                    onPress={() => navigation.navigate('PlaylistDetail', { playlistId: pl.id })}
+                    style={styles.playlistCard}
+                  >
+                    <View style={styles.playlistArt}>
+                      {pl.cover_url ? (
+                        <Image
+                          source={{ uri: pl.cover_url }}
+                          style={StyleSheet.absoluteFill}
+                          contentFit="cover"
+                        />
+                      ) : (
+                        <LinearGradient colors={[a, b]} style={StyleSheet.absoluteFill} />
+                      )}
+                    </View>
+                    <Text style={[styles.playlistTitle, { color: colors.text }]} numberOfLines={2}>
+                      {pl.title}
+                    </Text>
+                    <Text style={[styles.playlistMeta, { color: colors.textMuted }]} numberOfLines={1}>
+                      {pl.owner?.display_name ?? 'Public playlist'}
+                      {pl.item_count != null ? ` · ${pl.item_count}` : ''}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </Animated.View>
+        ) : null}
+
+        {/* Categories — 5 chips + see all */}
+        <Animated.View style={{ opacity: fade, marginTop: 26 }}>
+          <SectionHeader
+            title="Categories"
+            onSeeAll={() => navigation.navigate('CategoriesAll')}
+            colors={colors}
+          />
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.railPad}
+          >
+            {homeCategories.map((c) => {
+              const icon = (CATEGORY_ICONS[c.slug] ??
+                'musical-notes-outline') as keyof typeof Ionicons.glyphMap;
+              return (
+                <Pressable
+                  key={c.id}
+                  onPress={() =>
+                    navigation.navigate('CategoryDetail', {
+                      categoryId: c.id,
+                      name: c.name,
+                    })
+                  }
+                  style={styles.moodItem}
+                >
+                  <View
+                    style={[
+                      styles.moodDisc,
+                      {
+                        backgroundColor: isDark ? '#1A1A1A' : colors.surface,
+                        borderColor: colors.border,
+                      },
+                    ]}
+                  >
+                    <Ionicons name={icon} size={22} color={colors.text} />
+                  </View>
+                  <Text style={[styles.moodLabel, { color: colors.text }]} numberOfLines={1}>
+                    {c.name}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </Animated.View>
+
+        {/* Trending — top 10 by play count */}
+        {trending.length ? (
+          <Animated.View style={{ opacity: fade, marginTop: 26 }}>
+            <SectionHeader
+              title="Trending now"
+              onSeeAll={() => navigation.navigate('TrendingAll')}
+              colors={colors}
+            />
+            <View style={{ paddingHorizontal: 16, gap: 10 }}>
+              {trending.map((item, index) => (
+                <Pressable
+                  key={item.id}
+                  onPress={() => void openSound(item, trending, 'Trending now')}
+                  style={styles.trendRow}
+                >
+                  <Text style={[styles.trendRank, { color: colors.textMuted }]}>{index + 1}</Text>
+                  <CoverArt title={item.title} uri={item.cover_url} size={52} rounded={10} />
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={[styles.trendTitle, { color: colors.text }]} numberOfLines={1}>
+                      {item.title}
+                    </Text>
+                    <View style={styles.trendMetaRow}>
+                      <Ionicons name="play" size={11} color={colors.textMuted} />
+                      <Text style={[styles.trendMeta, { color: colors.textMuted }]}>
+                        {formatPlaysShort(item.play_count)}
+                      </Text>
+                    </View>
+                  </View>
+                  <Ionicons name="ellipsis-horizontal" size={18} color={colors.textMuted} />
+                </Pressable>
+              ))}
+            </View>
+          </Animated.View>
+        ) : null}
+
+        <Animated.View style={{ opacity: fade, marginTop: 28, paddingHorizontal: 16 }}>
           <Pressable
             onPress={() => openSearch()}
-            style={[styles.allSoundsBtn, { borderColor: colors.border, backgroundColor: colors.surface }]}
+            style={[
+              styles.allSoundsBtn,
+              { borderColor: colors.border, backgroundColor: colors.surface },
+            ]}
           >
-            <Icon name="albums-outline" size={20} color={colors.text} />
+            <Ionicons name="albums-outline" size={20} color={colors.text} />
             <View style={{ flex: 1 }}>
               <Text style={[styles.allSoundsTitle, { color: colors.text }]}>All sounds</Text>
               <Text style={[styles.allSoundsSub, { color: colors.textMuted }]}>
                 Browse the full catalog{catalogCount ? ` · ${catalogCount} tracks` : ''}
               </Text>
             </View>
-            <Icon name="chevron-forward" size={18} color={colors.textMuted} />
+            <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
           </Pressable>
         </Animated.View>
-
-        {!sections.length && daily ? (
-          <View style={{ paddingHorizontal: 20, marginTop: 28 }}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Keep exploring</Text>
-            <Pressable
-              onPress={() => openSearch()}
-              style={[styles.linkRow, { borderColor: colors.border }]}
-            >
-              <Text style={{ color: colors.text, fontFamily: 'DMSans_500Medium' }}>
-                Open search
-              </Text>
-              <Text style={{ color: colors.textMuted }}>→</Text>
-            </Pressable>
-          </View>
-        ) : null}
       </ScrollView>
+    </View>
+  );
+}
 
-      {current ? (
-        <Pressable
-          onPress={() => navigation.navigate('Player', { soundId: current.id })}
-          style={[
-            styles.nowPlaying,
-            {
-              borderColor: colors.border,
-              backgroundColor: isDark ? 'rgba(18,18,18,0.96)' : 'rgba(255,255,255,0.96)',
-              bottom: 0,
-              paddingBottom: 10,
-            },
-          ]}
-        >
-          <CoverArt title={current.title} uri={current.cover_url} size={44} rounded={10} />
-          <View style={{ flex: 1, marginHorizontal: 12 }}>
-            <Text style={[styles.npTitle, { color: colors.text }]} numberOfLines={1}>
-              {current.title}
-            </Text>
-            <Text style={{ color: colors.textMuted, fontSize: 12, fontFamily: 'DMSans_400Regular' }}>
-              {isPlaying ? 'Playing now' : 'Paused'}
-            </Text>
-          </View>
-          <Pressable
-            onPress={() => {
-              void togglePlay();
-            }}
-            hitSlop={10}
-            style={[styles.npBtn, { backgroundColor: colors.inverse }]}
-          >
-            <Text style={{ color: colors.inverseText, fontWeight: '700' }}>
-              {isPlaying ? 'Ⅱ' : '▶'}
-            </Text>
-          </Pressable>
+function SectionHeader({
+  title,
+  onSeeAll,
+  colors,
+}: {
+  title: string;
+  onSeeAll?: () => void;
+  colors: { text: string; textMuted: string };
+}) {
+  return (
+    <View style={styles.sectionHead}>
+      <Text style={[styles.sectionTitle, { color: colors.text }]}>{title}</Text>
+      {onSeeAll ? (
+        <Pressable onPress={onSeeAll} hitSlop={8}>
+          <Text style={[styles.seeAll, { color: colors.textMuted }]}>See All</Text>
         </Pressable>
       ) : null}
     </View>
@@ -656,95 +795,146 @@ const styles = StyleSheet.create({
   limitBody: { fontFamily: 'DMSans_400Regular', fontSize: 12, lineHeight: 17 },
   topRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 8,
   },
-  brand: {
-    fontFamily: 'Fraunces_700Bold',
-    fontSize: 34,
-    letterSpacing: -0.8,
-    lineHeight: 38,
-  },
-  hello: {
-    fontFamily: 'DMSans_400Regular',
-    fontSize: 14,
-  },
-  helloRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 },
-  topActions: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
-  passPill: {
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
-  passText: { fontFamily: 'DMSans_500Medium', fontSize: 11, letterSpacing: 0.3 },
-  iconBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: StyleSheet.hairlineWidth,
+  iconHit: {
+    width: 40,
+    height: 40,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  heroPress: { borderRadius: 22, overflow: 'hidden' },
-  hero: {
-    width: '100%',
-    borderRadius: 22,
-    overflow: 'hidden',
-    justifyContent: 'flex-end',
+  greetingBlock: { flex: 1, alignItems: 'center' },
+  greeting: {
+    fontFamily: 'Fraunces_700Bold',
+    fontSize: 22,
+    letterSpacing: -0.4,
+    textAlign: 'center',
   },
-  heroCopy: { padding: 20, paddingBottom: 22 },
-  heroEyebrow: {
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 2,
+  },
+  userName: {
     fontFamily: 'DMSans_500Medium',
-    color: 'rgba(255,255,255,0.72)',
-    fontSize: 12,
-    letterSpacing: 1.4,
-    textTransform: 'uppercase',
+    fontSize: 14,
+    maxWidth: 180,
+  },
+  searchBar: {
+    marginTop: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  searchPlaceholder: { flex: 1, fontFamily: 'DMSans_400Regular', fontSize: 14 },
+  sectionHead: {
+    paddingHorizontal: 16,
+    marginBottom: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  sectionTitle: {
+    fontFamily: 'Fraunces_600SemiBold',
+    fontSize: 20,
+    letterSpacing: -0.3,
+  },
+  seeAll: { fontFamily: 'DMSans_500Medium', fontSize: 13 },
+  railPad: { paddingHorizontal: 16, gap: 12 },
+  continueCard: {
+    width: 300,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 16,
+    padding: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  continueArt: { position: 'relative' },
+  continuePlay: {
+    position: 'absolute',
+    right: 4,
+    bottom: 4,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  continueTitle: { fontFamily: 'DMSans_700Bold', fontSize: 15 },
+  continueMeta: { fontFamily: 'DMSans_400Regular', fontSize: 12, marginTop: 2 },
+  progressTrack: {
+    height: 3,
+    borderRadius: 2,
+    marginTop: 10,
+    overflow: 'hidden',
+  },
+  progressFill: { height: '100%', borderRadius: 2 },
+  progressTimes: { fontFamily: 'DMSans_400Regular', fontSize: 11, marginTop: 6 },
+  heartHit: { padding: 4 },
+  moodItem: { width: 76, alignItems: 'center' },
+  moodDisc: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 8,
   },
-  heroTitle: {
-    fontFamily: 'Fraunces_700Bold',
-    color: '#FFFFFF',
-    fontSize: 30,
-    letterSpacing: -0.6,
-    lineHeight: 34,
+  moodLabel: {
+    fontFamily: 'DMSans_500Medium',
+    fontSize: 12,
+    textAlign: 'center',
   },
-  heroMeta: {
-    fontFamily: 'DMSans_400Regular',
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 13,
-    marginTop: 8,
+  trendRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
-  heroCtaRow: {
+  trendRank: {
+    fontFamily: 'DMSans_700Bold',
+    fontSize: 15,
+    width: 22,
+    textAlign: 'center',
+  },
+  trendTitle: { fontFamily: 'DMSans_700Bold', fontSize: 15 },
+  trendMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 },
+  trendMeta: { fontFamily: 'DMSans_400Regular', fontSize: 12 },
+  allSoundsBtn: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 16,
+    padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
-    marginTop: 18,
   },
-  playCta: {
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 22,
-    paddingVertical: 12,
-    borderRadius: 999,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  allSoundsTitle: { fontFamily: 'DMSans_700Bold', fontSize: 16 },
+  allSoundsSub: { fontFamily: 'DMSans_400Regular', fontSize: 12, marginTop: 2 },
+  playlistCard: { width: 140 },
+  playlistArt: {
+    width: 140,
+    height: 140,
+    borderRadius: 14,
+    overflow: 'hidden',
+    marginBottom: 8,
   },
-  playCtaText: {
-    fontFamily: 'DMSans_700Bold',
-    color: '#000000',
-    fontSize: 14,
-  },
-  heroHint: {
-    fontFamily: 'DMSans_400Regular',
-    color: 'rgba(255,255,255,0.65)',
-    fontSize: 13,
-  },
+  playlistTitle: { fontFamily: 'DMSans_700Bold', fontSize: 13, lineHeight: 17 },
+  playlistMeta: { fontFamily: 'DMSans_400Regular', fontSize: 11, marginTop: 2 },
   emptyHero: {
     borderWidth: 1,
     borderRadius: 22,
     padding: 24,
-    minHeight: 200,
+    minHeight: 180,
     justifyContent: 'center',
   },
   emptyTitle: {
@@ -758,79 +948,11 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     marginBottom: 18,
   },
-  sectionHead: { paddingHorizontal: 20, marginBottom: 14 },
-  sectionTitle: {
-    fontFamily: 'Fraunces_600SemiBold',
-    fontSize: 22,
-    letterSpacing: -0.3,
+  playCta: {
+    paddingHorizontal: 22,
+    paddingVertical: 12,
+    borderRadius: 999,
+    alignSelf: 'flex-start',
   },
-  sectionSub: {
-    fontFamily: 'DMSans_400Regular',
-    fontSize: 13,
-    marginTop: 4,
-  },
-  moodRow: { paddingHorizontal: 20, gap: 14 },
-  moodItem: { width: 76, alignItems: 'center' },
-  moodDisc: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    marginBottom: 8,
-  },
-  moodLabel: {
-    fontFamily: 'DMSans_500Medium',
-    fontSize: 12,
-    textAlign: 'center',
-  },
-  rail: { paddingHorizontal: 20, gap: 14 },
-  tile: { width: 148 },
-  tileTitle: {
-    fontFamily: 'DMSans_700Bold',
-    fontSize: 14,
-    marginTop: 10,
-    lineHeight: 18,
-  },
-  tileMeta: {
-    fontFamily: 'DMSans_400Regular',
-    fontSize: 12,
-    marginTop: 4,
-  },
-  linkRow: {
-    marginTop: 12,
-    borderWidth: 1,
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  allSoundsBtn: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 16,
-    padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-  },
-  allSoundsTitle: { fontFamily: 'DMSans_700Bold', fontSize: 16 },
-  allSoundsSub: { fontFamily: 'DMSans_400Regular', fontSize: 12, marginTop: 2 },
-  nowPlaying: {
-    position: 'absolute',
-    left: 12,
-    right: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 16,
-    padding: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  npTitle: { fontFamily: 'DMSans_700Bold', fontSize: 14 },
-  npBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  playCtaText: { fontFamily: 'DMSans_700Bold', fontSize: 14 },
 });

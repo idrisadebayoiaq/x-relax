@@ -56,6 +56,7 @@ export function PremiumScreen() {
   return (
     <ScreenScaffold
       title="Premium"
+      onBack={() => navigation.goBack()}
       subtitle={
         isPremium
           ? `You’re on ${profile?.premium_status ?? 'Premium'} · unlimited calm.`

@@ -15,7 +15,10 @@ import {
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider } from './src/features/auth/AuthProvider';
 import { PlayerProvider } from './src/features/player/PlayerProvider';
+import { MixProvider } from './src/features/mix/MixProvider';
 import { RootNavigator } from './src/navigation/RootNavigator';
+import { SleepTimeScheduler } from './src/features/premium/SleepTimeScheduler';
+import { useAuth } from './src/features/auth/AuthProvider';
 import { useAppTheme } from './src/lib/useAppTheme';
 import { isSupabaseConfigured } from './src/lib/supabase';
 
@@ -65,6 +68,7 @@ function ConfigGate({ children }: { children: ReactNode }) {
 
 function AppShell() {
   const { isDark } = useAppTheme();
+  const { session } = useAuth();
 
   useEffect(() => {
     SplashScreen.hideAsync().catch(() => undefined);
@@ -73,6 +77,7 @@ function AppShell() {
   return (
     <>
       <RootNavigator />
+      {session ? <SleepTimeScheduler /> : null}
       <StatusBar style={isDark ? 'light' : 'dark'} />
     </>
   );
@@ -101,7 +106,9 @@ export default function App() {
         <ConfigGate>
           <AuthProvider>
             <PlayerProvider>
-              <AppShell />
+              <MixProvider>
+                <AppShell />
+              </MixProvider>
             </PlayerProvider>
           </AuthProvider>
         </ConfigGate>

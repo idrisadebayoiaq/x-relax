@@ -7,11 +7,18 @@ import { AuthNavigator } from './AuthNavigator';
 import { MainTabs } from './MainTabs';
 import { PlayerScreen } from '../features/player/PlayerScreen';
 import { PlaylistDetailScreen } from '../features/library/PlaylistDetailScreen';
+import { PlaylistsListScreen } from '../features/library/PlaylistsListScreen';
+import {
+  FavouritesListScreen,
+  DownloadsListScreen,
+  LibraryMixesScreen,
+} from '../features/library/LibrarySectionScreens';
 import { CategoryDetailScreen } from '../features/library/CategoryDetailScreen';
 import { PaymentCheckoutScreen } from '../features/premium/PaymentCheckoutScreen';
 import { MyPaymentsScreen } from '../features/premium/MyPaymentsScreen';
 import { AdminPaymentsScreen } from '../features/premium/AdminPaymentsScreen';
 import { MixStudioScreen } from '../features/premium/MixStudioScreen';
+import { SleepTimeScreen } from '../features/premium/SleepTimeScreen';
 import { BecomeCreatorScreen } from '../features/creator/BecomeCreatorScreen';
 import { CreatorUploadScreen } from '../features/creator/CreatorUploadScreen';
 import { CreatorSoundsScreen } from '../features/creator/CreatorSoundsScreen';
@@ -23,6 +30,11 @@ import { AdminVerificationsScreen } from '../features/creator/AdminVerifications
 import { AdminWithdrawalsScreen } from '../features/creator/AdminWithdrawalsScreen';
 import { NotificationsScreen } from '../features/home/NotificationsScreen';
 import { LegalScreen } from '../features/home/LegalScreen';
+import { CategoriesAllScreen } from '../features/library/CategoriesAllScreen';
+import { TrendingAllScreen } from '../features/library/TrendingAllScreen';
+import { PremiumScreen } from '../features/premium/PremiumScreen';
+import { CreatorScreen } from '../features/creator/CreatorScreen';
+import { CreatorProfileScreen } from '../features/creator/CreatorProfileScreen';
 import type { RootStackParamList } from './types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -39,12 +51,22 @@ function AppStack() {
       <Stack.Screen name="Tabs" component={MainTabs} />
       <Stack.Screen name="Player" component={PlayerScreen} options={{ presentation: 'modal' }} />
       <Stack.Screen name="PlaylistDetail" component={PlaylistDetailScreen} />
+      <Stack.Screen name="PlaylistsList" component={PlaylistsListScreen} />
+      <Stack.Screen name="FavouritesList" component={FavouritesListScreen} />
+      <Stack.Screen name="DownloadsList" component={DownloadsListScreen} />
+      <Stack.Screen name="LibraryMixes" component={LibraryMixesScreen} />
       <Stack.Screen name="CategoryDetail" component={CategoryDetailScreen} />
+      <Stack.Screen name="CategoriesAll" component={CategoriesAllScreen} />
+      <Stack.Screen name="TrendingAll" component={TrendingAllScreen} />
+      <Stack.Screen name="Premium" component={PremiumScreen} />
+      <Stack.Screen name="Creator" component={CreatorScreen} />
+      <Stack.Screen name="CreatorProfile" component={CreatorProfileScreen} />
       <Stack.Screen name="PaymentCheckout" component={PaymentCheckoutScreen} />
       <Stack.Screen name="MyPayments" component={MyPaymentsScreen} />
       <Stack.Screen name="AdminPayments" component={AdminPaymentsScreen} />
       <Stack.Screen name="AdminHub" component={AdminHubScreen} />
       <Stack.Screen name="MixStudio" component={MixStudioScreen} />
+      <Stack.Screen name="SleepTime" component={SleepTimeScreen} />
       <Stack.Screen name="BecomeCreator" component={BecomeCreatorScreen} />
       <Stack.Screen name="CreatorUpload" component={CreatorUploadScreen} />
       <Stack.Screen name="CreatorSounds" component={CreatorSoundsScreen} />

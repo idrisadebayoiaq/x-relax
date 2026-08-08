@@ -1,8 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { Check, Heart, Plus, Star } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/auth-context';
+import { usePlayer } from '@/lib/player-context';
 import type { Sound } from '@/types/database';
 
 type ReviewRow = {
@@ -22,6 +24,7 @@ export function SoundRatingPanel({
   onSoundUpdated?: (next: Pick<Sound, 'average_rating' | 'rating_count'>) => void;
 }) {
   const { user } = useAuth();
+  const { toggleFavourite, isFavourite } = usePlayer();
   const [myScore, setMyScore] = useState(0);
   const [comment, setComment] = useState('');
   const [reviews, setReviews] = useState<ReviewRow[]>([]);
@@ -138,66 +141,114 @@ export function SoundRatingPanel({
 
     setBusy(false);
     await load();
-    alert('Thanks for your review!');
+    alert('Your rating was saved.');
   };
 
   return (
     <div className="space-y-4">
-      <div className="card p-4 flex items-center gap-4">
-        <div>
-          <p className="text-3xl font-bold">{count ? avg.toFixed(1) : '—'}</p>
-          <p className="text-sm text-muted">
-            {count ? `${count} rating${count === 1 ? '' : 's'}` : 'No ratings yet'}
-          </p>
-        </div>
-        <div className="flex gap-1 text-xl" aria-hidden>
-          {[1, 2, 3, 4, 5].map((s) => (
-            <span key={s} className={avg >= s - 0.25 ? '' : 'opacity-25'}>
-              ★
+      <div className="rounded-2xl border border-border overflow-hidden">
+        <button
+          type="button"
+          onClick={() => void toggleFavourite()}
+          className={`w-full flex items-center gap-3 px-4 py-3.5 text-left ${
+            isFavourite ? 'bg-foreground/5' : ''
+          }`}
+        >
+          <Heart
+            size={20}
+            className={isFavourite ? 'fill-red-500 text-red-500' : 'text-foreground'}
+          />
+          <span className="flex-1 min-w-0">
+            <span className="block font-semibold text-sm">
+              {isFavourite ? 'Liked' : 'Like this sound'}
             </span>
-          ))}
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        <p className="text-xs uppercase tracking-wider text-muted">Your rating & review</p>
-        <div className="flex gap-2 flex-wrap">
-          {[1, 2, 3, 4, 5].map((s) => (
-            <button
-              key={s}
-              type="button"
-              className={`chip ${myScore === s ? 'chip-active' : ''}`}
-              onClick={() => setMyScore(s)}
-            >
-              {'★'.repeat(s)}
-            </button>
-          ))}
-        </div>
-        <textarea
-          className="input min-h-[90px]"
-          placeholder="Write a review (optional)"
-          value={comment}
-          onChange={(e) => setComment(e.target.value)}
-        />
-        <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void submit()}>
-          {busy ? 'Saving…' : 'Submit review'}
+            <span className="block text-xs text-muted">
+              Saves to Favourites and shapes Recommended
+            </span>
+          </span>
+          {isFavourite ? (
+            <Check size={18} className="text-red-500" />
+          ) : (
+            <Plus size={18} className="text-muted" />
+          )}
         </button>
+
+        <div className="border-t border-border px-4 py-4 space-y-3">
+          <div>
+            <p className="text-[11px] uppercase tracking-wider text-muted mb-1">Community rating</p>
+            <div className="flex items-center gap-3">
+              <p className="text-4xl font-serif font-bold">{count ? avg.toFixed(1) : '—'}</p>
+              <div className="flex gap-0.5 text-amber-400" aria-hidden>
+                {[1, 2, 3, 4, 5].map((s) => (
+                  <Star
+                    key={s}
+                    size={14}
+                    className={count && avg >= s - 0.25 ? 'fill-amber-400' : 'opacity-25'}
+                  />
+                ))}
+              </div>
+            </div>
+            <p className="text-sm text-muted mt-1">
+              {count
+                ? `${count} rating${count === 1 ? '' : 's'}`
+                : 'No ratings yet — be the first'}
+            </p>
+          </div>
+
+          <div>
+            <p className="text-sm text-muted mb-2">Your rating</p>
+            <div className="flex gap-1">
+              {[1, 2, 3, 4, 5].map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  className="text-amber-400 p-0.5"
+                  onClick={() => setMyScore(s)}
+                  aria-label={`${s} stars`}
+                >
+                  <Star
+                    size={28}
+                    className={myScore >= s ? 'fill-amber-400' : 'opacity-35'}
+                  />
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <textarea
+            className="input min-h-[80px]"
+            placeholder="Add a short review (optional)"
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+          />
+          <button
+            type="button"
+            className="btn btn-primary w-full"
+            disabled={busy || myScore < 1}
+            onClick={() => void submit()}
+          >
+            {busy ? 'Saving…' : comment.trim() ? 'Save rating & review' : 'Save rating'}
+          </button>
+        </div>
       </div>
 
-      <div className="space-y-3">
-        <p className="text-xs uppercase tracking-wider text-muted">Reviews</p>
-        {reviews.map((row) => (
-          <div key={row.id} className="card p-3 space-y-1">
-            <div className="flex justify-between gap-2 text-sm">
-              <p className="font-semibold">{row.profile?.display_name ?? 'Listener'}</p>
-              <p className="text-muted">{row.score ? '★'.repeat(row.score) : ''}</p>
+      {reviews.length > 0 ? (
+        <div className="space-y-3">
+          <p className="text-xs uppercase tracking-wider text-muted">Reviews</p>
+          {reviews.map((row) => (
+            <div key={row.id} className="rounded-xl border border-border p-3 space-y-1">
+              <div className="flex justify-between gap-2 text-sm">
+                <p className="font-semibold">{row.profile?.display_name ?? 'Listener'}</p>
+                <p className="text-amber-400 text-xs">
+                  {row.score ? '★'.repeat(row.score) : ''}
+                </p>
+              </div>
+              <p className="text-sm">{row.body}</p>
+              <p className="text-xs text-muted">{new Date(row.created_at).toLocaleDateString()}</p>
             </div>
-            <p className="text-sm">{row.body}</p>
-            <p className="text-xs text-muted">{new Date(row.created_at).toLocaleDateString()}</p>
-          </div>
-        ))}
-        {!reviews.length ? <p className="text-sm text-muted">Be the first to leave a review.</p> : null}
-      </div>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

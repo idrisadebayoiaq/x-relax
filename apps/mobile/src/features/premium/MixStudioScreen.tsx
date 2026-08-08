@@ -1,500 +1,585 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  FlatList,
+  Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { setAudioModeAsync } from 'expo-audio';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAppTheme } from '../../lib/useAppTheme';
-import {
-  isMixPlaying,
-  pauseMixLayers,
-  registerMixStopHandler,
-  releaseMixLayers,
-  resumeMixLayers,
-  setMixLayerVolume,
-  startMixLayers,
-  type MixLayer,
-} from '../../lib/mixPlayback';
-import { useAuth } from '../auth/AuthProvider';
-import { usePlayer } from '../player/PlayerProvider';
 import { supabase } from '../../lib/supabase';
+import { useAuth } from '../auth/AuthProvider';
+import { useMix, type SavedMix } from '../mix/MixProvider';
 import { CoverArt } from '../home/CoverArt';
-import { IconButton } from '../../ui/Icon';
-import type { Mix, Sound } from '../../types/database';
+import type { Category, Sound } from '../../types/database';
+import type { RootStackParamList } from '../../navigation/types';
 
-type SavedMix = Mix & {
-  tracks: { volume: number; position: number; sound: Sound }[];
-};
+type Props = NativeStackScreenProps<RootStackParamList, 'MixStudio'>;
 
-export function MixStudioScreen() {
+const FILTER_FALLBACK = [
+  'nature',
+  'rain',
+  'ocean',
+  'fireplace',
+  'wind',
+  'sleep',
+  'focus',
+  'meditation',
+  'asmr',
+];
+
+function VolumeSlider({
+  value,
+  onChange,
+  colors,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+  colors: { text: string; border: string };
+}) {
+  const widthRef = useRef(1);
+  return (
+    <View style={styles.volRow}>
+      <Pressable
+        style={[styles.volTrack, { backgroundColor: 'rgba(128,128,128,0.35)' }]}
+        onLayout={(e) => {
+          widthRef.current = e.nativeEvent.layout.width || 1;
+        }}
+        onPress={(e) => {
+          const w = widthRef.current || 1;
+          onChange(Math.min(1, Math.max(0, e.nativeEvent.locationX / w)));
+        }}
+      >
+        <View
+          style={[
+            styles.volFill,
+            {
+              width: `${Math.min(100, value * 100)}%` as `${number}%`,
+              backgroundColor: colors.text,
+            },
+          ]}
+        />
+        <View
+          style={[
+            styles.volKnob,
+            {
+              left: `${Math.min(96, Math.max(0, value * 100))}%` as `${number}%`,
+              backgroundColor: '#FFFFFF',
+              borderColor: colors.border,
+            },
+          ]}
+        />
+      </Pressable>
+      <Text style={[styles.volPct, { color: colors.text }]}>{Math.round(value * 100)}%</Text>
+    </View>
+  );
+}
+
+export function MixStudioScreen({ navigation, route }: Props) {
   const { colors, isDark } = useAppTheme();
   const insets = useSafeAreaInsets();
-  const { user, canUseMixes } = useAuth();
-  const { stopPlayback } = usePlayer();
-  const navigation = useNavigation();
+  const { canUseMixes } = useAuth();
+  const {
+    layers,
+    mixTitle,
+    isMixPlaying,
+    maxTracks,
+    setMixTitle,
+    addSound,
+    removeSound,
+    setTrackVolume,
+    toggleMixPlay,
+    playMix,
+    loadSavedMix,
+    saveMix,
+    seedWithSound,
+    setSleepTimerMinutes,
+    sleepEndsAt,
+  } = useMix();
+
   const [catalog, setCatalog] = useState<Sound[]>([]);
-  const [selected, setSelected] = useState<MixLayer[]>([]);
-  const [savedMixes, setSavedMixes] = useState<SavedMix[]>([]);
-  const [title, setTitle] = useState('My mix');
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [links, setLinks] = useState<{ sound_id: string; category_id: string }[]>([]);
+  const [filterSlug, setFilterSlug] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [mixPlaying, setMixPlaying] = useState(false);
-  const selectedRef = useRef<MixLayer[]>([]);
-  selectedRef.current = selected;
-
-  const maxTracks = 8;
-
-  const loadSavedMixes = useCallback(async () => {
-    if (!user) {
-      setSavedMixes([]);
-      return;
-    }
-    const { data } = await supabase
-      .from('mixes')
-      .select('*, tracks:mix_tracks(volume, position, sound:sounds(*))')
-      .eq('user_id', user.id)
-      .order('updated_at', { ascending: false });
-    const rows = ((data as SavedMix[]) ?? [])
-      .map((mix) => ({
-        ...mix,
-        tracks: [...(mix.tracks ?? [])].sort((a, b) => a.position - b.position),
-      }))
-      .filter((mix) => mix.tracks.length > 0);
-    setSavedMixes(rows);
-  }, [user]);
+  const [saving, setSaving] = useState(false);
+  const seededRef = useRef(false);
 
   useEffect(() => {
     (async () => {
-      const { data } = await supabase
-        .from('sounds')
-        .select('*')
-        .eq('status', 'published')
-        .order('title');
-      setCatalog((data as Sound[]) ?? []);
+      const [{ data: sounds }, { data: cats }, { data: catLinks }] = await Promise.all([
+        supabase.from('sounds').select('*').eq('status', 'published').order('title'),
+        supabase
+          .from('categories')
+          .select('*')
+          .is('parent_id', null)
+          .order('sort_order'),
+        supabase.from('sound_categories').select('sound_id, category_id'),
+      ]);
+      setCatalog((sounds as Sound[]) ?? []);
+      setCategories((cats as Category[]) ?? []);
+      setLinks((catLinks as { sound_id: string; category_id: string }[]) ?? []);
       setLoading(false);
     })();
   }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      loadSavedMixes();
-    }, [loadSavedMixes]),
-  );
-
-  const stopMix = useCallback(async () => {
-    releaseMixLayers(selectedRef.current);
-    setSelected((prev) => prev.map((layer) => ({ ...layer, player: undefined })));
-    setMixPlaying(false);
-  }, []);
+  useEffect(() => {
+    const mixId = route.params?.mixId;
+    if (!mixId || !canUseMixes) return;
+    (async () => {
+      const { data } = await supabase
+        .from('mixes')
+        .select('*, tracks:mix_tracks(volume, position, sound:sounds(*))')
+        .eq('id', mixId)
+        .maybeSingle();
+      if (!data) return;
+      const mix = {
+        ...(data as SavedMix),
+        tracks: [...((data as SavedMix).tracks ?? [])].sort((a, b) => a.position - b.position),
+      };
+      await loadSavedMix(mix, false);
+    })();
+  }, [route.params?.mixId, canUseMixes, loadSavedMix]);
 
   useEffect(() => {
-    registerMixStopHandler(() => {
-      void stopMix();
-    });
-    return () => {
-      registerMixStopHandler(null);
-      releaseMixLayers(selectedRef.current);
-    };
-  }, [stopMix]);
+    const seedId = route.params?.seedSoundId;
+    if (!seedId || seededRef.current || !catalog.length || !canUseMixes) return;
+    const sound = catalog.find((s) => s.id === seedId);
+    if (!sound) return;
+    seededRef.current = true;
+    void seedWithSound(sound);
+  }, [route.params?.seedSoundId, catalog, canUseMixes, seedWithSound]);
 
-  const toggleSelect = async (sound: Sound) => {
-    const exists = selected.find((layer) => layer.sound.id === sound.id);
-    if (exists) {
-      try {
-        exists.player?.pause();
-        exists.player?.remove();
-      } catch {
-        /* ignore */
+  const filterChips = useMemo(() => {
+    const bySlug = new Map(categories.map((c) => [c.slug, c]));
+    const ordered: Category[] = [];
+    for (const slug of FILTER_FALLBACK) {
+      const cat = bySlug.get(slug);
+      if (cat) ordered.push(cat);
+    }
+    for (const cat of categories) {
+      if (!ordered.some((c) => c.id === cat.id) && cat.slug !== 'mixes') ordered.push(cat);
+    }
+    return ordered.slice(0, 12);
+  }, [categories]);
+
+  useEffect(() => {
+    if (!filterSlug && filterChips.length) setFilterSlug(filterChips[0].slug);
+  }, [filterChips, filterSlug]);
+
+  const filteredCatalog = useMemo(() => {
+    const selectedIds = new Set(layers.map((l) => l.sound.id));
+    let list = catalog;
+    if (filterSlug) {
+      const cat = categories.find((c) => c.slug === filterSlug);
+      if (cat) {
+        const ids = new Set(links.filter((l) => l.category_id === cat.id).map((l) => l.sound_id));
+        list = catalog.filter((s) => ids.has(s.id));
       }
-      setSelected((prev) => prev.filter((layer) => layer.sound.id !== sound.id));
-      setMixPlaying(isMixPlaying(selected.filter((layer) => layer.sound.id !== sound.id)));
+    }
+    return list;
+  }, [catalog, filterSlug, categories, links, layers]);
+
+  const promptSave = () => {
+    if (!canUseMixes) {
+      Alert.alert('Premium feature', 'Saving mixes requires Premium.', [
+        { text: 'Not now', style: 'cancel' },
+        { text: 'View Premium', onPress: () => navigation.navigate('Premium') },
+      ]);
       return;
     }
-    if (selected.length >= maxTracks) {
-      Alert.alert('Limit reached', `Max ${maxTracks} tracks in a mix.`);
-      return;
-    }
-    setSelected((prev) => [...prev, { sound, volume: 0.8 }]);
-  };
-
-  const playMix = useCallback(async () => {
-    if (!selectedRef.current.length) {
-      Alert.alert('Empty mix', 'Select at least one sound.');
-      return;
-    }
-
-    if (isMixPlaying(selectedRef.current)) {
-      pauseMixLayers(selectedRef.current);
-      setMixPlaying(false);
-      return;
-    }
-
-    if (selectedRef.current.some((layer) => layer.player)) {
-      resumeMixLayers(selectedRef.current);
-      setMixPlaying(true);
-      return;
-    }
-
-    await stopPlayback();
-    await setAudioModeAsync({
-      playsInSilentMode: true,
-      shouldPlayInBackground: true,
-      interruptionMode: 'doNotMix',
-      shouldRouteThroughEarpiece: false,
-      allowsRecording: false,
-    }).catch(() => undefined);
-
-    releaseMixLayers(selectedRef.current);
-    const started = await startMixLayers(selectedRef.current);
-    if (!started.length) {
-      Alert.alert('Playback failed', 'Could not start the selected sounds.');
-      return;
-    }
-    setSelected(started);
-    setMixPlaying(true);
-  }, [stopPlayback]);
-
-  const adjustVolume = (soundId: string, delta: number) => {
-    setSelected((prev) => {
-      const next = setMixLayerVolume(
-        prev,
-        soundId,
-        (prev.find((layer) => layer.sound.id === soundId)?.volume ?? 0.8) + delta,
+    if (Platform.OS === 'ios' && typeof Alert.prompt === 'function') {
+      Alert.prompt(
+        'Save Mix',
+        'Saved mixes appear in Library → My Mixes',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Save',
+            onPress: (name?: string) => {
+              setSaving(true);
+              void saveMix(name || mixTitle).finally(() => setSaving(false));
+            },
+          },
+        ],
+        'plain-text',
+        mixTitle,
       );
-      selectedRef.current = next;
-      return next;
-    });
-  };
-
-  const loadSavedMix = async (mix: SavedMix) => {
-    await stopMix();
-    await stopPlayback();
-    const layers: MixLayer[] = mix.tracks
-      .map((track) => ({
-        sound: track.sound,
-        volume: Number(track.volume) || 0.8,
-      }))
-      .filter((layer) => !!layer.sound?.audio_url);
-    if (!layers.length) {
-      Alert.alert('Mix unavailable', 'This mix has no playable sounds.');
       return;
     }
-    setTitle(mix.title);
-    setSelected(layers);
-    selectedRef.current = layers;
-  };
-
-  const saveMix = async () => {
-    if (!user) return;
-    if (!selected.length) {
-      Alert.alert('Empty mix', 'Select at least one sound.');
-      return;
-    }
-    setBusy(true);
-    const { data: mix, error } = await supabase
-      .from('mixes')
-      .insert({ user_id: user.id, title: title.trim() || 'My mix' })
-      .select('*')
-      .single();
-    if (error || !mix) {
-      setBusy(false);
-      Alert.alert('Save failed', error?.message ?? 'Unknown error');
-      return;
-    }
-    const { error: tracksError } = await supabase.from('mix_tracks').insert(
-      selected.map((layer, index) => ({
-        mix_id: mix.id,
-        sound_id: layer.sound.id,
-        volume: layer.volume,
-        position: index,
-      })),
-    );
-    setBusy(false);
-    if (tracksError) {
-      await supabase.from('mixes').delete().eq('id', mix.id);
-      Alert.alert('Save failed', tracksError.message);
-      return;
-    }
-    await loadSavedMixes();
-    Alert.alert('Saved', 'Your mix was saved.');
-  };
-
-  const handleBack = async () => {
-    await stopMix();
-    navigation.goBack();
+    Alert.alert('Save Mix', `Save "${mixTitle}" to Library → My Mixes?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Save',
+        onPress: () => {
+          setSaving(true);
+          void saveMix(mixTitle).finally(() => setSaving(false));
+        },
+      },
+    ]);
   };
 
   if (!canUseMixes) {
     return (
-      <View style={{ flex: 1, backgroundColor: colors.background, paddingTop: insets.top + 24, paddingHorizontal: 20 }}>
-        <IconButton
-          name="chevron-back"
-          onPress={() => navigation.goBack()}
-          color={colors.textMuted}
-          size={22}
-          style={{ alignSelf: 'flex-start', marginLeft: -8, marginBottom: 16 }}
-        />
-        <Text style={[styles.title, { color: colors.text }]}>Mix studio</Text>
-        <Text style={[styles.sub, { color: colors.textMuted, marginTop: 8 }]}>
-          Layer sounds together and save custom mixes. Premium or admin access required.
-        </Text>
-        <Pressable
-          style={[styles.actionPrimary, { backgroundColor: colors.inverse, marginTop: 24, alignSelf: 'flex-start' }]}
-          onPress={() => navigation.navigate('Tabs', { screen: 'Premium' } as never)}
-        >
-          <Text style={{ color: colors.inverseText, fontFamily: 'DMSans_700Bold' }}>View Premium</Text>
-        </Pressable>
+      <View style={[styles.root, { backgroundColor: colors.background, paddingTop: insets.top }]}>
+        <View style={styles.header}>
+          <Pressable onPress={() => navigation.goBack()} hitSlop={12} style={styles.headerBtn}>
+            <Ionicons name="chevron-back" size={24} color={colors.text} />
+          </Pressable>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>Mix Sounds</Text>
+          <View style={styles.headerBtn} />
+        </View>
+        <View style={styles.locked}>
+          <Ionicons name="layers-outline" size={40} color={colors.textMuted} />
+          <Text style={[styles.lockedTitle, { color: colors.text }]}>Premium Mix Studio</Text>
+          <Text style={[styles.lockedBody, { color: colors.textMuted }]}>
+            Combine Rain, Thunder, Birds and more — play them at the same time with independent
+            volumes.
+          </Text>
+          <Pressable
+            onPress={() => navigation.navigate('Premium')}
+            style={[styles.primaryBtn, { backgroundColor: colors.inverse }]}
+          >
+            <Text style={[styles.primaryBtnText, { color: colors.inverseText }]}>View Premium</Text>
+          </Pressable>
+        </View>
       </View>
     );
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.background }}>
-      <LinearGradient
-        colors={isDark ? ['#121212', '#000'] : ['#F3F0EA', '#FFF']}
-        style={StyleSheet.absoluteFill}
-      />
-      <View style={{ paddingTop: insets.top + 12, paddingHorizontal: 20, paddingBottom: 8 }}>
-        <IconButton
-          name="chevron-back"
-          onPress={() => void handleBack()}
-          color={colors.textMuted}
-          size={22}
-          style={{ alignSelf: 'flex-start', marginLeft: -8, marginBottom: 4 }}
-        />
-        <Text style={[styles.title, { color: colors.text }]}>Mix studio</Text>
-        <Text style={[styles.sub, { color: colors.textMuted }]}>
-          Premium · up to {maxTracks} layers · save enabled
-        </Text>
-        <TextInput
-          style={[
-            styles.input,
-            {
-              color: colors.text,
-              borderColor: colors.border,
-              backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : colors.surface,
-            },
-          ]}
-          value={title}
-          onChangeText={setTitle}
-          placeholder="Mix title"
-          placeholderTextColor={colors.textMuted}
-        />
-        <View style={styles.actions}>
-          <Pressable
-            style={[styles.actionPrimary, { backgroundColor: colors.inverse }]}
-            onPress={() => void playMix()}
-          >
-            <Ionicons name={mixPlaying ? 'pause' : 'play'} size={16} color={colors.inverseText} />
-            <Text style={{ color: colors.inverseText, fontFamily: 'DMSans_700Bold' }}>
-              {mixPlaying ? 'Pause mix' : 'Play mix'}
-            </Text>
-          </Pressable>
-          <Pressable
-            style={[styles.actionOutline, { borderColor: colors.border }]}
-            onPress={() => void stopMix()}
-          >
-            <Ionicons name="stop-outline" size={16} color={colors.text} />
-            <Text style={{ color: colors.text, fontFamily: 'DMSans_700Bold' }}>Stop</Text>
-          </Pressable>
-          <Pressable
-            style={[styles.actionOutline, { borderColor: colors.border, opacity: busy ? 0.5 : 1 }]}
-            onPress={saveMix}
-            disabled={busy}
-          >
-            <Ionicons name="save-outline" size={16} color={colors.text} />
-            <Text style={{ color: colors.text, fontFamily: 'DMSans_700Bold' }}>Save</Text>
-          </Pressable>
-        </View>
-        <Text style={[styles.section, { color: colors.textMuted }]}>
-          Selected · {selected.length}/{maxTracks}
-        </Text>
+    <View style={[styles.root, { backgroundColor: colors.background, paddingTop: insets.top }]}>
+      <View style={styles.header}>
+        <Pressable onPress={() => navigation.goBack()} hitSlop={12} style={styles.headerBtn}>
+          <Ionicons name="chevron-back" size={24} color={colors.text} />
+        </Pressable>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Mix Sounds</Text>
+        <Pressable onPress={promptSave} disabled={saving} hitSlop={8} style={styles.headerBtn}>
+          <Text style={[styles.saveText, { color: colors.text }]}>{saving ? '…' : 'Save'}</Text>
+        </Pressable>
       </View>
 
-      {selected.length ? (
-        <View style={{ paddingHorizontal: 20, marginBottom: 8 }}>
-          {selected.map((layer) => (
-            <View key={layer.sound.id} style={[styles.selectedRow, { borderColor: colors.border }]}>
-              <CoverArt title={layer.sound.title} uri={layer.sound.cover_url} size={40} rounded={10} />
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.selectedTitle, { color: colors.text }]} numberOfLines={1}>
-                  {layer.sound.title}
-                </Text>
-                <View style={styles.volumeRow}>
-                  <Pressable onPress={() => adjustVolume(layer.sound.id, -0.1)} hitSlop={8}>
-                    <Ionicons name="remove-circle-outline" size={20} color={colors.textMuted} />
-                  </Pressable>
-                  <Text style={[styles.volumeText, { color: colors.textMuted }]}>
-                    Vol {Math.round(layer.volume * 100)}%
-                  </Text>
-                  <Pressable onPress={() => adjustVolume(layer.sound.id, 0.1)} hitSlop={8}>
-                    <Ionicons name="add-circle-outline" size={20} color={colors.textMuted} />
-                  </Pressable>
-                </View>
-              </View>
-              <Pressable onPress={() => void toggleSelect(layer.sound)}>
-                <Ionicons name="close-circle-outline" size={22} color={colors.textMuted} />
-              </Pressable>
-            </View>
-          ))}
-        </View>
-      ) : null}
-
-      {savedMixes.length ? (
-        <>
-          <Text style={[styles.section, { color: colors.textMuted, paddingHorizontal: 20 }]}>
-            Saved mixes
+      <ScrollView
+        contentContainerStyle={{ paddingBottom: insets.bottom + 120 }}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.titleBlock}>
+          <TextInput
+            value={mixTitle}
+            onChangeText={setMixTitle}
+            placeholder="Mix name"
+            placeholderTextColor={colors.textMuted}
+            style={[styles.titleInput, { color: colors.text, borderColor: colors.border }]}
+          />
+          <Text style={[styles.hint, { color: colors.textMuted }]}>
+            {layers.length}/{maxTracks} sounds · Save stores this mix in Library → My Mixes
           </Text>
-          <View style={{ paddingHorizontal: 20, marginBottom: 8 }}>
-            {savedMixes.map((mix) => (
-              <Pressable
-                key={mix.id}
-                style={[styles.savedRow, { borderColor: colors.border }]}
-                onPress={() => void loadSavedMix(mix)}
-              >
-                <Ionicons name="layers-outline" size={18} color={colors.textMuted} />
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.savedTitle, { color: colors.text }]} numberOfLines={1}>
-                    {mix.title}
-                  </Text>
-                  <Text style={[styles.savedMeta, { color: colors.textMuted }]}>
-                    {mix.tracks.length} layer{mix.tracks.length === 1 ? '' : 's'}
-                  </Text>
-                </View>
-                <Text style={{ color: colors.textMuted }}>Load</Text>
-              </Pressable>
-            ))}
-          </View>
-        </>
-      ) : null}
+        </View>
 
-      <Text style={[styles.section, { color: colors.textMuted, paddingHorizontal: 20 }]}>
-        Catalog
-      </Text>
-      {loading ? (
-        <ActivityIndicator color={colors.icon} style={{ marginTop: 20 }} />
-      ) : (
-        <FlatList
-          data={catalog}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 40 }}
-          renderItem={({ item }) => {
-            const on = !!selected.find((layer) => layer.sound.id === item.id);
-            return (
-              <Pressable style={styles.catalogRow} onPress={() => void toggleSelect(item)}>
-                <CoverArt title={item.title} uri={item.cover_url} size={48} rounded={12} />
-                <Text style={[styles.catalogTitle, { color: colors.text }]} numberOfLines={1}>
-                  {item.title}
-                </Text>
-                <View
-                  style={[
-                    styles.badge,
-                    {
-                      backgroundColor: on ? colors.inverse : 'transparent',
-                      borderColor: colors.border,
-                    },
-                  ]}
-                >
-                  <Text
-                    style={{
-                      color: on ? colors.inverseText : colors.textMuted,
-                      fontFamily: 'DMSans_700Bold',
-                      fontSize: 11,
-                    }}
-                  >
-                    {on ? 'On' : 'Add'}
+        {/* Active mix layers */}
+        <View style={{ paddingHorizontal: 16, gap: 12 }}>
+          {layers.length === 0 ? (
+            <View style={[styles.emptyCard, { borderColor: colors.border }]}>
+              <Text style={[styles.emptyText, { color: colors.textMuted }]}>
+                No sounds in this mix yet. Add some below.
+              </Text>
+            </View>
+          ) : (
+            layers.map((layer) => (
+              <View
+                key={layer.sound.id}
+                style={[
+                  styles.layerCard,
+                  { backgroundColor: isDark ? '#141414' : colors.surface, borderColor: colors.border },
+                ]}
+              >
+                <CoverArt title={layer.sound.title} uri={layer.sound.cover_url} size={52} rounded={10} />
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={[styles.layerTitle, { color: colors.text }]} numberOfLines={1}>
+                    {layer.sound.title}
                   </Text>
+                  <VolumeSlider
+                    value={layer.volume}
+                    onChange={(v) => setTrackVolume(layer.sound.id, v)}
+                    colors={colors}
+                  />
                 </View>
+                <Pressable onPress={() => removeSound(layer.sound.id)} hitSlop={10} style={styles.removeBtn}>
+                  <Ionicons name="close" size={18} color={colors.textMuted} />
+                </Pressable>
+              </View>
+            ))
+          )}
+        </View>
+
+        {/* Transport */}
+        {layers.length ? (
+          <View style={styles.transport}>
+            <Pressable
+              onPress={() => {
+                Alert.alert('Sleep timer', 'Stop the whole mix when time is up.', [
+                  ...[10, 20, 30, 45, 60].map((m) => ({
+                    text: `${m} min`,
+                    onPress: () => setSleepTimerMinutes(m),
+                  })),
+                  ...(sleepEndsAt
+                    ? [{ text: 'Clear', style: 'destructive' as const, onPress: () => setSleepTimerMinutes(null) }]
+                    : []),
+                  { text: 'Cancel', style: 'cancel' as const },
+                ]);
+              }}
+              style={[styles.transportSide, { borderColor: colors.border }]}
+            >
+              <Ionicons name="timer-outline" size={20} color={colors.text} />
+            </Pressable>
+            <Pressable
+              onPress={() => void toggleMixPlay()}
+              style={[styles.playBtn, { backgroundColor: colors.inverse }]}
+            >
+              <Ionicons
+                name={isMixPlaying ? 'pause' : 'play'}
+                size={28}
+                color={colors.inverseText}
+                style={!isMixPlaying ? { marginLeft: 2 } : undefined}
+              />
+            </Pressable>
+            <Pressable
+              onPress={() => void playMix()}
+              style={[styles.transportSide, { borderColor: colors.border }]}
+            >
+              <Ionicons name="refresh-outline" size={20} color={colors.text} />
+            </Pressable>
+          </View>
+        ) : null}
+
+        {/* Add more */}
+        <Text style={[styles.sectionLabel, { color: colors.text }]}>Add More Sounds</Text>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.chips}
+        >
+          {filterChips.map((cat) => {
+            const active = filterSlug === cat.slug;
+            return (
+              <Pressable
+                key={cat.id}
+                onPress={() => setFilterSlug(cat.slug)}
+                style={[
+                  styles.chip,
+                  {
+                    borderColor: active ? '#3B82F6' : colors.border,
+                    backgroundColor: active ? 'rgba(59,130,246,0.12)' : 'transparent',
+                  },
+                ]}
+              >
+                <Text style={[styles.chipText, { color: active ? '#60A5FA' : colors.text }]}>
+                  {cat.name}
+                </Text>
               </Pressable>
             );
-          }}
-        />
-      )}
+          })}
+        </ScrollView>
+
+        {loading ? (
+          <ActivityIndicator color={colors.icon} style={{ marginTop: 24 }} />
+        ) : (
+          <View style={{ paddingHorizontal: 16, gap: 10, marginTop: 8 }}>
+            {filteredCatalog.map((sound) => {
+              const inMix = layers.some((l) => l.sound.id === sound.id);
+              const catName =
+                categories.find((c) =>
+                  links.some((l) => l.sound_id === sound.id && l.category_id === c.id),
+                )?.name ?? 'Sound';
+              return (
+                <View
+                  key={sound.id}
+                  style={[
+                    styles.addRow,
+                    { borderColor: colors.border, backgroundColor: isDark ? '#101010' : colors.surface },
+                  ]}
+                >
+                  <CoverArt title={sound.title} uri={sound.cover_url} size={48} rounded={10} />
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={[styles.addTitle, { color: colors.text }]} numberOfLines={1}>
+                      {sound.title}
+                    </Text>
+                    <Text style={[styles.addMeta, { color: colors.textMuted }]}>{catName}</Text>
+                  </View>
+                  <Pressable
+                    onPress={() => {
+                      if (inMix) removeSound(sound.id);
+                      else void addSound(sound);
+                    }}
+                    style={[
+                      styles.addBtn,
+                      {
+                        backgroundColor: inMix ? 'rgba(59,130,246,0.2)' : colors.inverse,
+                      },
+                    ]}
+                  >
+                    <Ionicons
+                      name={inMix ? 'checkmark' : 'add'}
+                      size={20}
+                      color={inMix ? '#60A5FA' : colors.inverseText}
+                    />
+                  </Pressable>
+                </View>
+              );
+            })}
+          </View>
+        )}
+      </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  title: { fontFamily: 'Fraunces_700Bold', fontSize: 34, letterSpacing: -0.8 },
-  sub: { fontFamily: 'DMSans_400Regular', fontSize: 14, marginTop: 6, marginBottom: 14 },
-  input: {
+  root: { flex: 1 },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+  },
+  headerBtn: {
+    minWidth: 56,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTitle: { fontFamily: 'Fraunces_700Bold', fontSize: 20, letterSpacing: -0.3 },
+  saveText: { fontFamily: 'DMSans_700Bold', fontSize: 15 },
+  titleBlock: { paddingHorizontal: 16, marginBottom: 16 },
+  titleInput: {
+    fontFamily: 'Fraunces_600SemiBold',
+    fontSize: 22,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingVertical: 8,
+  },
+  hint: { fontFamily: 'DMSans_400Regular', fontSize: 12, marginTop: 8 },
+  emptyCard: {
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontFamily: 'DMSans_400Regular',
-    fontSize: 15,
+    padding: 18,
+  },
+  emptyText: { fontFamily: 'DMSans_400Regular', fontSize: 14, lineHeight: 20 },
+  layerCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 14,
+    padding: 12,
+  },
+  layerTitle: { fontFamily: 'DMSans_700Bold', fontSize: 15, marginBottom: 8 },
+  removeBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  volRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  volTrack: {
+    flex: 1,
+    height: 4,
+    borderRadius: 2,
+    justifyContent: 'center',
+  },
+  volFill: { height: '100%', borderRadius: 2 },
+  volKnob: {
+    position: 'absolute',
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    marginLeft: -7,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  volPct: { fontFamily: 'DMSans_500Medium', fontSize: 12, width: 40, textAlign: 'right' },
+  transport: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 18,
+    marginTop: 20,
+    marginBottom: 8,
+  },
+  transportSide: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  playBtn: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sectionLabel: {
+    fontFamily: 'Fraunces_600SemiBold',
+    fontSize: 18,
+    marginTop: 28,
     marginBottom: 12,
-  },
-  actions: { flexDirection: 'row', gap: 8, marginBottom: 8 },
-  actionPrimary: {
-    borderRadius: 12,
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
   },
-  actionOutline: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  section: {
-    fontFamily: 'DMSans_500Medium',
-    fontSize: 11,
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-    marginTop: 8,
-    marginBottom: 8,
-  },
-  selectedRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    paddingVertical: 10,
-  },
-  selectedTitle: { fontFamily: 'DMSans_500Medium', fontSize: 14, marginBottom: 4 },
-  volumeRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  volumeText: { fontFamily: 'DMSans_400Regular', fontSize: 12, minWidth: 64 },
-  savedRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginBottom: 8,
-  },
-  savedTitle: { fontFamily: 'DMSans_700Bold', fontSize: 14 },
-  savedMeta: { fontFamily: 'DMSans_400Regular', fontSize: 12, marginTop: 2 },
-  catalogRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 10,
-  },
-  catalogTitle: { flex: 1, fontFamily: 'DMSans_700Bold', fontSize: 14 },
-  badge: {
-    borderWidth: StyleSheet.hairlineWidth,
+  chips: { paddingHorizontal: 16, gap: 8 },
+  chip: {
+    borderWidth: 1,
     borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
   },
+  chipText: { fontFamily: 'DMSans_500Medium', fontSize: 13 },
+  addRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 14,
+    padding: 10,
+  },
+  addTitle: { fontFamily: 'DMSans_700Bold', fontSize: 14 },
+  addMeta: { fontFamily: 'DMSans_400Regular', fontSize: 12, marginTop: 2 },
+  addBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  locked: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+    gap: 12,
+  },
+  lockedTitle: { fontFamily: 'Fraunces_700Bold', fontSize: 24, textAlign: 'center' },
+  lockedBody: {
+    fontFamily: 'DMSans_400Regular',
+    fontSize: 14,
+    lineHeight: 21,
+    textAlign: 'center',
+  },
+  primaryBtn: {
+    marginTop: 12,
+    borderRadius: 14,
+    paddingHorizontal: 22,
+    paddingVertical: 14,
+  },
+  primaryBtnText: { fontFamily: 'DMSans_700Bold', fontSize: 15 },
 });

@@ -35,11 +35,46 @@ type Analytics = {
   top_sound?: { id: string; title: string; play_count: number } | null;
 };
 
+type ProfileAnalytics = {
+  follower_count?: number;
+  new_followers_7d?: number;
+  monthly_listeners?: number;
+  total_likes?: number;
+  new_likes_7d?: number;
+  plays_7d?: number;
+  total_saves?: number;
+  top_countries?: { country_code: string; plays: number }[];
+  sounds?: {
+    id: string;
+    title: string;
+    play_count: number;
+    likes: number;
+    saves: number;
+    status: string;
+  }[];
+};
+
+type EarnRequirement = {
+  key: string;
+  label: string;
+  required: number;
+  current: number;
+  met: boolean;
+};
+
+type EarnStatus = {
+  can_earn?: boolean;
+  eligible?: boolean;
+  requirements?: EarnRequirement[];
+};
+
 export function CreatorScreen() {
   const { colors } = useAppTheme();
-  const { isCreator, isAdmin, refreshProfile } = useAuth();
+  const { user, isCreator, isAdmin, refreshProfile } = useAuth();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [stats, setStats] = useState<Analytics | null>(null);
+  const [profileStats, setProfileStats] = useState<ProfileAnalytics | null>(null);
+  const [earnStatus, setEarnStatus] = useState<EarnStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -48,8 +83,14 @@ export function CreatorScreen() {
       setLoading(false);
       return;
     }
-    const { data, error } = await supabase.rpc('creator_analytics');
+    const [{ data, error }, { data: profileData }, { data: earnData }] = await Promise.all([
+      supabase.rpc('creator_analytics'),
+      supabase.rpc('creator_profile_analytics'),
+      supabase.rpc('get_creator_earn_requirements'),
+    ]);
     if (!error) setStats((data as Analytics) ?? null);
+    setProfileStats((profileData as ProfileAnalytics) ?? null);
+    setEarnStatus((earnData as EarnStatus) ?? null);
     setLoading(false);
     setRefreshing(false);
   }, [isCreator]);
@@ -65,6 +106,7 @@ export function CreatorScreen() {
     return (
       <ScreenScaffold
         title="Creator"
+        onBack={() => navigation.goBack()}
         subtitle="Share original relaxation audio and earn from Premium listening."
       >
         <EmptyBlock
@@ -91,6 +133,7 @@ export function CreatorScreen() {
   return (
     <ScreenScaffold
       title="Creator"
+      onBack={() => navigation.goBack()}
       subtitle="Dashboard · pull to refresh"
       contentStyle={{ paddingBottom: 48 }}
       refreshControl={
@@ -138,9 +181,139 @@ export function CreatorScreen() {
         ))}
       </View>
 
+      <SectionLabel>Audience</SectionLabel>
+      <View style={styles.grid}>
+        {(
+          [
+            ['Followers', String(profileStats?.follower_count ?? 0)],
+            ['New · 7d', String(profileStats?.new_followers_7d ?? 0)],
+            ['Monthly listeners', String(profileStats?.monthly_listeners ?? 0)],
+            ['Likes', String(profileStats?.total_likes ?? 0)],
+            ['New likes · 7d', String(profileStats?.new_likes_7d ?? 0)],
+            ['Plays · 7d', String(profileStats?.plays_7d ?? 0)],
+            ['Saves', String(profileStats?.total_saves ?? 0)],
+          ] as const
+        ).map(([label, value]) => (
+          <View key={label} style={[styles.stat, { borderColor: colors.border }]}>
+            <Text style={[styles.statLabel, { color: colors.textMuted }]}>{label}</Text>
+            <Text style={[styles.statValue, { color: colors.text }]}>{value}</Text>
+          </View>
+        ))}
+      </View>
+
+      {!earnStatus?.can_earn && earnStatus?.requirements?.length ? (
+        <>
+          <SectionLabel>Path to earning</SectionLabel>
+          <Text
+            style={{
+              marginHorizontal: 20,
+              marginBottom: 10,
+              color: colors.textMuted,
+              fontFamily: 'DMSans_400Regular',
+              fontSize: 13,
+            }}
+          >
+            Track how close you are to Apply to Earn (includes 1,000 likes).
+          </Text>
+          {earnStatus.requirements
+            .filter((r) => r.key !== 'identity')
+            .map((req) => {
+              const pct = Math.min(
+                100,
+                Math.round((Number(req.current) / Math.max(1, Number(req.required))) * 100),
+              );
+              return (
+                <View key={req.key} style={[styles.progressCard, { borderColor: colors.border }]}>
+                  <View style={styles.progressHead}>
+                    <Text style={{ color: colors.text, fontFamily: 'DMSans_700Bold', flex: 1 }}>
+                      {req.label}
+                    </Text>
+                    <Text style={{ color: colors.textMuted, fontFamily: 'DMSans_400Regular', fontSize: 12 }}>
+                      {req.current}/{req.required}
+                    </Text>
+                  </View>
+                  <View style={[styles.progressTrack, { backgroundColor: colors.border }]}>
+                    <View
+                      style={[
+                        styles.progressFill,
+                        {
+                          width: `${pct}%`,
+                          backgroundColor: req.met ? '#22C55E' : '#C9A227',
+                        },
+                      ]}
+                    />
+                  </View>
+                </View>
+              );
+            })}
+        </>
+      ) : null}
+
+      {profileStats?.top_countries?.length ? (
+        <>
+          <SectionLabel>Top listening countries</SectionLabel>
+          {profileStats.top_countries.map((row) => (
+            <View
+              key={row.country_code}
+              style={[styles.countryRow, { borderColor: colors.border }]}
+            >
+              <Text style={{ color: colors.text, fontFamily: 'DMSans_700Bold' }}>
+                {row.country_code === 'XX' ? 'Unknown' : row.country_code}
+              </Text>
+              <Text style={{ color: colors.textMuted, fontFamily: 'DMSans_400Regular' }}>
+                {row.plays} plays
+              </Text>
+            </View>
+          ))}
+        </>
+      ) : null}
+
+      {profileStats?.sounds?.length ? (
+        <>
+          <SectionLabel>Sound performance</SectionLabel>
+          {profileStats.sounds.slice(0, 12).map((s) => (
+            <View key={s.id} style={[styles.countryRow, { borderColor: colors.border }]}>
+              <View style={{ flex: 1, paddingRight: 8 }}>
+                <Text style={{ color: colors.text, fontFamily: 'DMSans_700Bold' }} numberOfLines={1}>
+                  {s.title}
+                </Text>
+                <Text style={{ color: colors.textMuted, fontFamily: 'DMSans_400Regular', fontSize: 12 }}>
+                  {s.status}
+                </Text>
+              </View>
+              <Text style={{ color: colors.textMuted, fontFamily: 'DMSans_400Regular', fontSize: 12 }}>
+                {s.play_count} plays · {s.likes} likes · {s.saves} saves
+              </Text>
+            </View>
+          ))}
+        </>
+      ) : null}
+
       <PrimaryButton
         label="Upload sound"
         onPress={() => navigation.navigate('CreatorUpload')}
+      />
+      {user ? (
+        <OutlineRow
+          label="Public creator profile"
+          hint="Banner, followers, and your catalog"
+          icon="person-circle-outline"
+          onPress={() => navigation.navigate('CreatorProfile', { creatorId: user.id })}
+        />
+      ) : null}
+
+      <SectionLabel>Listening</SectionLabel>
+      <OutlineRow
+        label="Playlists"
+        hint="Same Library playlists as listeners"
+        icon="list-outline"
+        onPress={() => navigation.navigate('PlaylistsList')}
+      />
+      <OutlineRow
+        label="Favourite Songs"
+        hint="Liked sounds that shape Recommended"
+        icon="heart-outline"
+        onPress={() => navigation.navigate('FavouritesList')}
       />
 
       <SectionLabel>Workspace</SectionLabel>
@@ -246,5 +419,39 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingVertical: 14,
     alignItems: 'center',
+  },
+  countryRow: {
+    marginHorizontal: 20,
+    marginBottom: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  progressCard: {
+    marginHorizontal: 20,
+    marginBottom: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 12,
+    padding: 12,
+  },
+  progressHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  progressTrack: {
+    height: 8,
+    borderRadius: 999,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: 8,
+    borderRadius: 999,
   },
 });

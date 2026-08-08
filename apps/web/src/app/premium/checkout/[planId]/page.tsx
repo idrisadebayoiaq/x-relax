@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/auth-context';
+import { paymentMethodForCountry } from '@/lib/countries';
 import type { PaymentMethod, SubscriptionPlan } from '@/types/database';
 
 type MethodInfo = {
@@ -21,13 +22,18 @@ type MethodInfo = {
 export default function CheckoutPage() {
   const params = useParams<{ planId: string }>();
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
+  const allowedMethod = paymentMethodForCountry(profile?.country_code);
   const [plan, setPlan] = useState<SubscriptionPlan | null>(null);
   const [methods, setMethods] = useState<Record<string, MethodInfo>>({});
-  const [method, setMethod] = useState<PaymentMethod>('ngn_opay');
+  const [method, setMethod] = useState<PaymentMethod>(allowedMethod);
   const [proof, setProof] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setMethod(allowedMethod);
+  }, [allowedMethod]);
 
   useEffect(() => {
     const supabase = createClient();
@@ -116,8 +122,13 @@ export default function CheckoutPage() {
       <h1 className="text-3xl font-serif font-bold">{plan.name}</h1>
       <form onSubmit={submit} className="card p-6 space-y-4">
         {error ? <p className="text-sm text-red-600">{error}</p> : null}
+        {!profile?.country_code ? (
+          <p className="text-sm text-muted">
+            Set your country in Profile so we show the correct payment details.
+          </p>
+        ) : null}
         <div className="flex gap-2">
-          {(['ngn_opay', 'usd_lead_bank'] as PaymentMethod[]).map((m) => (
+          {([allowedMethod] as PaymentMethod[]).map((m) => (
             <button
               key={m}
               type="button"

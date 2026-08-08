@@ -59,6 +59,21 @@ export function WelcomeBanner() {
           {welcome.body ? (
             <Text style={[styles.body, { color: colors.textMuted }]}>{welcome.body}</Text>
           ) : null}
+          <View style={[styles.premiumBox, { borderColor: colors.border }]}>
+            <Text style={[styles.premiumTitle, { color: colors.text }]}>Premium benefits</Text>
+            {(
+              [
+                'Unlimited listening every day',
+                'Loop, Sleep Time, and sleep timer',
+                'Offline downloads and Mix Studio',
+                'Ad-free calm experience',
+              ] as const
+            ).map((line) => (
+              <Text key={line} style={[styles.premiumLine, { color: colors.textMuted }]}>
+                • {line}
+              </Text>
+            ))}
+          </View>
           <Pressable
             onPress={dismiss}
             style={[styles.btn, { backgroundColor: colors.inverse }]}
@@ -104,7 +119,24 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
     textAlign: 'center',
-    marginBottom: 22,
+    marginBottom: 14,
+  },
+  premiumBox: {
+    alignSelf: 'stretch',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 16,
+  },
+  premiumTitle: {
+    fontFamily: 'DMSans_700Bold',
+    fontSize: 14,
+    marginBottom: 8,
+  },
+  premiumLine: {
+    fontFamily: 'DMSans_400Regular',
+    fontSize: 13,
+    lineHeight: 20,
   },
   btn: {
     borderRadius: 14,

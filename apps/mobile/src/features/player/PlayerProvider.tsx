@@ -10,7 +10,6 @@ import {
 } from 'react';
 import {
   createAudioPlayer,
-  setAudioModeAsync,
   type AudioPlayer,
   type AudioStatus,
 } from 'expo-audio';
@@ -23,6 +22,7 @@ import {
   getTodayPlayedSoundIds,
 } from '../../lib/dailyListenLimit';
 import { stopExternalMixPlayback } from '../../lib/mixPlayback';
+import { claimExclusiveAudioFocus } from '../../lib/audioSession';
 import { useAuth } from '../auth/AuthProvider';
 import type { Sound } from '../../types/database';
 
@@ -106,14 +106,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   isLoopingRef.current = isLooping;
 
   useEffect(() => {
-    // doNotMix is required for lock-screen / notification media controls.
-    setAudioModeAsync({
-      playsInSilentMode: true,
-      shouldPlayInBackground: true,
-      interruptionMode: 'doNotMix',
-      shouldRouteThroughEarpiece: false,
-      allowsRecording: false,
-    }).catch(() => undefined);
+    void claimExclusiveAudioFocus();
   }, []);
 
   useEffect(() => {
@@ -351,15 +344,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       if (!sound.audio_url) return false;
 
       stopExternalMixPlayback();
-
-      // Re-assert media session mode in case Mix Studio changed it.
-      await setAudioModeAsync({
-        playsInSilentMode: true,
-        shouldPlayInBackground: true,
-        interruptionMode: 'doNotMix',
-        shouldRouteThroughEarpiece: false,
-        allowsRecording: false,
-      }).catch(() => undefined);
+      await claimExclusiveAudioFocus();
 
       const userId = user?.id ?? null;
       const claim = await claimDailySoundPlay(userId, sound.id, hasUnlimitedListening);
@@ -439,7 +424,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     if (audio.playing) {
       flushPlayCount();
       audio.pause();
+      // Keep exclusive focus so other apps (Spotify, etc.) do not auto-resume.
+      await claimExclusiveAudioFocus();
     } else {
+      await claimExclusiveAudioFocus();
       lastStatusAtRef.current = Date.now();
       audio.play();
     }
@@ -467,12 +455,21 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   const toggleLoop = useCallback(async () => {
     if (sleepLoopRef.current) return;
+    if (!isPremium) return;
     const next = !isLooping;
     setIsLooping(next);
     const audio = soundRef.current;
     if (!audio) return;
     audio.loop = next;
-  }, [isLooping]);
+  }, [isLooping, isPremium]);
+
+  useEffect(() => {
+    if (!isPremium && isLooping) {
+      setIsLooping(false);
+      const audio = soundRef.current;
+      if (audio && !sleepLoopRef.current) audio.loop = false;
+    }
+  }, [isPremium, isLooping]);
 
   const setSleepTimerMinutes = useCallback((minutes: number | null) => {
     if (minutes != null && !isPremium) return;

@@ -3,8 +3,11 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { CoverArt } from '@/components/CoverArt';
+import { Bell, Search } from 'lucide-react';
 import { SoundCard } from '@/components/SoundCard';
+import { HorizontalRail } from '@/components/HorizontalRail';
+import { ListeningTipBanner } from '@/components/ListeningTipBanner';
+import { WelcomeBanner } from '@/components/WelcomeBanner';
 import { loadHomeCatalog, type CatalogSection } from '@/lib/catalog';
 import { getDailyPlayStatus, FREE_DAILY_SOUND_LIMIT } from '@/lib/daily-listen-limit';
 import { moodPaletteFor } from '@/lib/format';
@@ -14,20 +17,18 @@ import type { Category, Sound } from '@/types/database';
 
 export default function HomePage() {
   const router = useRouter();
-  const { user, isPremium, hasUnlimitedListening } = useAuth();
+  const { user, profile, isPremium, hasUnlimitedListening } = useAuth();
   const { playSound } = usePlayer();
   const [sections, setSections] = useState<CatalogSection[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [daily, setDaily] = useState<Sound | null>(null);
   const [catalog, setCatalog] = useState<Sound[]>([]);
   const [loading, setLoading] = useState(true);
   const [dailyPlays, setDailyPlays] = useState<{ remaining: number; limit: number } | null>(null);
 
   useEffect(() => {
     loadHomeCatalog(user?.id)
-      .then(({ all, daily: pick, sections: secs, categories: cats }) => {
+      .then(({ all, sections: secs, categories: cats }) => {
         setCatalog(all);
-        setDaily(pick);
         setSections(secs);
         setCategories(cats);
       })
@@ -55,23 +56,42 @@ export default function HomePage() {
     if (started) router.push('/player');
   };
 
-  const heroColors = daily ? moodPaletteFor(daily.title) : (['#0B1C1D', '#1A2E2F'] as [string, string]);
-
   if (loading) {
     return <p className="text-muted">Loading calm…</p>;
   }
 
+  const greetingName = profile?.display_name?.split(' ')[0] ?? 'there';
+
   return (
-    <div className="max-w-6xl mx-auto space-y-8">
+    <div className="max-w-6xl mx-auto space-y-9">
+      <ListeningTipBanner />
+      <WelcomeBanner />
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-4xl font-serif font-bold tracking-tight">X-Relax</h1>
+          <h1 className="text-3xl md:text-4xl font-serif font-bold tracking-tight">
+            Hello, {greetingName}
+          </h1>
           <p className="text-muted mt-1">Your space for sleep, focus, and calm</p>
         </div>
-        <div className="flex gap-2">
-          {isPremium ? <span className="chip chip-active">Premium</span> : null}
-          <Link href="/search" className="chip">Search</Link>
-          <Link href="/notifications" className="chip">Alerts</Link>
+        <div className="flex gap-2 items-center">
+          {isPremium ? (
+            <span className="chip chip-active inline-flex items-center gap-1.5">Premium</span>
+          ) : null}
+          <Link
+            href="/search"
+            className="chip inline-flex items-center gap-1.5"
+            aria-label="Search"
+          >
+            <Search size={15} />
+            Search
+          </Link>
+          <Link
+            href="/notifications"
+            className="chip inline-flex items-center gap-1.5"
+            aria-label="Notifications"
+          >
+            <Bell size={15} />
+          </Link>
         </div>
       </div>
 
@@ -84,33 +104,11 @@ export default function HomePage() {
           </p>
           <p className="text-sm text-muted mt-1">
             Free plan · unlock {FREE_DAILY_SOUND_LIMIT} sounds/day · replay those freely.{' '}
-            <Link href="/premium" className="underline">Upgrade for unlimited</Link>
+            <Link href="/premium" className="underline">
+              Upgrade for unlimited
+            </Link>
           </p>
         </div>
-      ) : null}
-
-      {daily ? (
-        <button
-          type="button"
-          onClick={() =>
-            void openSound(daily, [daily, ...catalog.filter((s) => s.id !== daily.id)], "Today's pick")
-          }
-          className="w-full text-left overflow-hidden rounded-3xl min-h-[280px] relative"
-          style={{ background: `linear-gradient(135deg, ${heroColors[0]}, ${heroColors[1]})` }}
-        >
-          <div className="absolute inset-0 p-8 flex flex-col justify-end text-white">
-            <p className="text-xs uppercase tracking-widest opacity-80">Today&apos;s pick</p>
-            <h2 className="text-3xl font-serif font-bold mt-2">{daily.title}</h2>
-            <p className="opacity-85 mt-2 max-w-xl">{daily.description ?? 'Press play and unwind.'}</p>
-            <span className="mt-4 inline-flex w-fit rounded-full bg-white text-black px-5 py-2 font-semibold">
-              Play now
-            </span>
-          </div>
-          {daily.cover_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={daily.cover_url} alt="" className="absolute inset-0 w-full h-full object-cover opacity-30" />
-          ) : null}
-        </button>
       ) : null}
 
       {categories.length ? (
@@ -119,11 +117,11 @@ export default function HomePage() {
             <h3 className="text-xl font-semibold">Categories</h3>
             <p className="text-sm text-muted">Open a category to play only those sounds</p>
           </div>
-          <div className="flex gap-4 overflow-x-auto pb-2">
+          <HorizontalRail>
             {categories.map((c) => {
               const [a, b] = moodPaletteFor(c.slug || c.name);
               return (
-                <Link key={c.id} href={`/category/${c.id}`} className="min-w-[88px] text-center">
+                <Link key={c.id} href={`/category/${c.id}`} className="min-w-[88px] text-center shrink-0">
                   <div
                     className="w-[76px] h-[76px] rounded-full mx-auto overflow-hidden"
                     style={{ background: `linear-gradient(135deg, ${a}, ${b})` }}
@@ -137,7 +135,7 @@ export default function HomePage() {
                 </Link>
               );
             })}
-          </div>
+          </HorizontalRail>
         </section>
       ) : null}
 
@@ -147,7 +145,7 @@ export default function HomePage() {
             <h3 className="text-xl font-semibold">{section.title}</h3>
             {section.subtitle ? <p className="text-sm text-muted">{section.subtitle}</p> : null}
           </div>
-          <div className="flex gap-4 overflow-x-auto pb-2">
+          <HorizontalRail>
             {section.data.map((sound) => (
               <SoundCard
                 key={`${section.key}-${sound.id}`}
@@ -156,11 +154,14 @@ export default function HomePage() {
                 onPlay={() => void openSound(sound, section.data, section.title)}
               />
             ))}
-          </div>
+          </HorizontalRail>
         </section>
       ))}
 
-      <Link href="/search" className="card block p-5">
+      <Link
+        href="/search"
+        className="card block p-5 hover:opacity-90 transition-opacity"
+      >
         <p className="font-semibold">All sounds</p>
         <p className="text-sm text-muted">Browse the full catalog · {catalog.length} tracks</p>
       </Link>

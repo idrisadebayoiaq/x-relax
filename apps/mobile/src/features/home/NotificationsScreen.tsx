@@ -10,10 +10,12 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../lib/useAppTheme';
 import { supabase } from '../../lib/supabase';
 import { registerForPushNotifications } from '../../lib/push';
+import type { RootStackParamList } from '../../navigation/types';
 import { EmptyBlock } from '../../ui/Screen';
 import { IconButton } from '../../ui/Icon';
 
@@ -29,7 +31,7 @@ type NotificationRow = {
 export function NotificationsScreen() {
   const { colors, isDark } = useAppTheme();
   const insets = useSafeAreaInsets();
-  const navigation = useNavigation();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [items, setItems] = useState<NotificationRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [pushMsg, setPushMsg] = useState<string | null>(null);
@@ -114,7 +116,14 @@ export function NotificationsScreen() {
               item.data?.from_unverified_admin === true || item.data?.admin_verified === false;
             return (
             <Pressable
-              onPress={() => markRead(item.id)}
+              onPress={() => {
+                void markRead(item.id);
+                const creatorId =
+                  typeof item.data?.creator_id === 'string' ? item.data.creator_id : null;
+                if (creatorId) {
+                  navigation.navigate('CreatorProfile', { creatorId });
+                }
+              }}
               style={[
                 styles.row,
                 {

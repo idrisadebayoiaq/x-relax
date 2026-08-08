@@ -7,6 +7,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { AppState, type AppStateStatus } from 'react-native';
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../../lib/supabase';
 import { presentWelcomePushIfNeeded, registerForPushNotifications } from '../../lib/push';
@@ -23,19 +24,22 @@ type AuthContextValue = {
   hasPremiumAccess: boolean;
   /** Unlimited daily listening (premium, creator, admin) */
   hasUnlimitedListening: boolean;
-  /** Mix Studio — premium or admin only */
+  /** Mix Studio — gated by feature_flags.mixes_require_premium (default true) */
   canUseMixes: boolean;
   /** Offline downloads — premium or admin only */
   canDownloadOffline: boolean;
   isAdmin: boolean;
   isCreator: boolean;
   freeMixLimit: number;
+  /** Premium max tracks is 8; free uses freeMixLimit when mixes are unlocked */
+  premiumMixLimit: number;
   refreshProfile: () => Promise<void>;
   signUp: (input: {
     email: string;
     password: string;
     displayName: string;
     role: SignupRole;
+    countryCode: string;
   }) => Promise<{ error: string | null }>;
   signIn: (input: {
     email: string;
@@ -47,6 +51,7 @@ type AuthContextValue = {
   updateProfile: (input: {
     displayName?: string;
     avatarUri?: string | null;
+    countryCode?: string | null;
   }) => Promise<{ error: string | null }>;
 };
 
@@ -88,6 +93,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [adminProfile, setAdminProfile] = useState<AdminProfile | null>(null);
   const [isPremium, setIsPremium] = useState(false);
   const [freeMixLimit, setFreeMixLimit] = useState(2);
+  const [mixesRequirePremium, setMixesRequirePremium] = useState(true);
   const [loading, setLoading] = useState(true);
 
   const loadUserData = useCallback(async (user: User | null) => {
@@ -116,6 +122,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .maybeSingle();
     const limit = Number((flags?.value as any)?.free_mix_track_limit ?? 2);
     setFreeMixLimit(Number.isFinite(limit) ? limit : 2);
+    const requirePremium = (flags?.value as any)?.mixes_require_premium;
+    setMixesRequirePremium(requirePremium !== false);
 
     // Best-effort FCM/APNs registration + welcome system notification
     registerForPushNotifications().then(async (result) => {
@@ -161,18 +169,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [loadUserData]);
 
+  // Reload profile when returning from background so avatar_url stays in sync
+  useEffect(() => {
+    const onChange = (state: AppStateStatus) => {
+      if (state !== 'active') return;
+      const uid = session?.user?.id;
+      if (!uid) return;
+      void fetchProfile(uid).then((next) => {
+        if (next) setProfile(next);
+      });
+    };
+    const sub = AppState.addEventListener('change', onChange);
+    return () => sub.remove();
+  }, [session?.user?.id]);
+
   const signUp = useCallback(
     async ({
       email,
       password,
       displayName,
       role,
+      countryCode,
     }: {
       email: string;
       password: string;
       displayName: string;
       role: SignupRole;
+      countryCode: string;
     }) => {
+      const code = countryCode.trim().toUpperCase();
+      if (!code) return { error: 'Country is required' };
       const safeRole: SignupRole = role === 'creator' ? 'creator' : 'listener';
       const { error } = await supabase.auth.signUp({
         email: email.trim(),
@@ -181,6 +207,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           data: {
             display_name: displayName.trim(),
             role: safeRole,
+            country_code: code,
           },
         },
       });
@@ -213,33 +240,68 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const updateProfile = useCallback(
-    async (input: { displayName?: string; avatarUri?: string | null }) => {
+    async (input: {
+      displayName?: string;
+      avatarUri?: string | null;
+      countryCode?: string | null;
+    }) => {
       if (!session?.user) return { error: 'Not signed in' };
 
       let avatarUrl: string | undefined;
       if (input.avatarUri) {
-        const ext = input.avatarUri.split('.').pop()?.split('?')[0] || 'jpg';
-        const path = `${session.user.id}/avatar.${ext}`;
-        const res = await fetch(input.avatarUri);
-        const blob = await res.blob();
+        const rawExt = (input.avatarUri.split('.').pop()?.split('?')[0] || 'jpg').toLowerCase();
+        const ext = ['jpg', 'jpeg', 'png', 'webp'].includes(rawExt) ? rawExt : 'jpg';
+        const contentType =
+          ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+        // Unique path so CDN/clients don't keep a stale avatar after replace
+        const path = `${session.user.id}/avatar-${Date.now()}.${ext}`;
+
+        let body: ArrayBuffer;
+        try {
+          const res = await fetch(input.avatarUri);
+          body = await res.arrayBuffer();
+          if (!body.byteLength) throw new Error('empty');
+        } catch {
+          try {
+            const FileSystem = await import('expo-file-system/legacy');
+            const base64 = await FileSystem.readAsStringAsync(input.avatarUri, {
+              encoding: FileSystem.EncodingType.Base64,
+            });
+            const binary = globalThis.atob(base64);
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+            body = bytes.buffer;
+          } catch {
+            return { error: 'Could not read the selected image.' };
+          }
+        }
+        if (!body.byteLength) return { error: 'Could not read the selected image.' };
+
         const { error: uploadError } = await supabase.storage
           .from('avatars')
-          .upload(path, blob, { upsert: true, contentType: blob.type || 'image/jpeg' });
+          .upload(path, body, { upsert: true, contentType, cacheControl: '3600' });
         if (uploadError) return { error: uploadError.message };
+
         const { data: pub } = supabase.storage.from('avatars').getPublicUrl(path);
-        avatarUrl = pub.publicUrl;
+        avatarUrl = `${pub.publicUrl}?v=${Date.now()}`;
       }
 
       const patch: {
         id?: string;
         display_name?: string;
         avatar_url?: string;
+        country_code?: string | null;
         updated_at: string;
       } = {
         updated_at: new Date().toISOString(),
       };
       if (input.displayName != null) patch.display_name = input.displayName.trim();
       if (avatarUrl) patch.avatar_url = avatarUrl;
+      if (input.countryCode !== undefined) {
+        patch.country_code = input.countryCode
+          ? input.countryCode.trim().toUpperCase()
+          : null;
+      }
 
       let error = (
         await supabase.from('profiles').update(patch).eq('id', session.user.id)
@@ -274,8 +336,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isCreator = profile?.role === 'creator' || isAdmin;
   const hasPremiumAccess = isPremium || isCreator || isAdmin;
   const hasUnlimitedListening = isPremium || isAdmin;
-  const canUseMixes = isPremium || isAdmin;
+  const canUseMixes = mixesRequirePremium ? isPremium || isAdmin : true;
   const canDownloadOffline = isPremium || isAdmin;
+  const premiumMixLimit = 8;
 
   const value = useMemo<AuthContextValue>(
     () => ({
@@ -292,6 +355,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAdmin,
       isCreator,
       freeMixLimit,
+      premiumMixLimit,
       refreshProfile,
       signUp,
       signIn,
@@ -314,6 +378,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAdmin,
       isCreator,
       freeMixLimit,
+      premiumMixLimit,
       refreshProfile,
       signUp,
       signIn,

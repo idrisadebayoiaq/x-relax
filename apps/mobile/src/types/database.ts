@@ -17,6 +17,7 @@ export type Profile = {
   id: string;
   display_name: string | null;
   avatar_url: string | null;
+  country_code: string | null;
   role: UserRole;
   premium_status: PremiumStatus;
   theme_preference: ThemePreference;
@@ -37,6 +38,10 @@ export type CreatorProfile = {
   is_verified: boolean;
   can_earn?: boolean;
   has_blue_badge?: boolean;
+  banner_url?: string | null;
+  monthly_listeners?: number;
+  follower_count?: number;
+  display_name?: string | null;
 };
 
 export type Category = {
@@ -76,8 +81,12 @@ export type Playlist = {
   title: string;
   description: string | null;
   is_favourite: boolean;
+  visibility?: 'private' | 'public';
+  cover_url?: string | null;
   created_at: string;
   updated_at: string;
+  owner?: { display_name: string | null } | null;
+  item_count?: number;
 };
 
 export type SubscriptionPlan = {
@@ -110,6 +119,16 @@ export type Mix = {
   id: string;
   user_id: string;
   title: string;
+  visibility?: 'private' | 'public' | null;
   created_at: string;
   updated_at: string;
+};
+
+export type MixTrack = {
+  id: string;
+  mix_id: string;
+  sound_id: string;
+  volume: number;
+  position: number;
+  sound?: Sound | null;
 };

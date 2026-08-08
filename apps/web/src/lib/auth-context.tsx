@@ -33,6 +33,7 @@ type AuthContextValue = {
     password: string;
     displayName: string;
     role: SignupRole;
+    countryCode: string;
   }) => Promise<{ error: string | null }>;
   signIn: (input: { email: string; password: string }) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
@@ -40,6 +41,7 @@ type AuthContextValue = {
   updateProfile: (input: {
     displayName?: string;
     avatarFile?: File | null;
+    countryCode?: string | null;
   }) => Promise<{ error: string | null }>;
 };
 
@@ -120,12 +122,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       password,
       displayName,
       role,
+      countryCode,
     }: {
       email: string;
       password: string;
       displayName: string;
       role: SignupRole;
+      countryCode: string;
     }) => {
+      const code = countryCode.trim().toUpperCase();
+      if (!code) return { error: 'Country is required' };
       const { error } = await supabase.auth.signUp({
         email: email.trim(),
         password,
@@ -133,6 +139,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           data: {
             display_name: displayName.trim(),
             role: role === 'creator' ? 'creator' : 'listener',
+            country_code: code,
           },
         },
       });
@@ -170,24 +177,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const updateProfile = useCallback(
-    async (input: { displayName?: string; avatarFile?: File | null }) => {
+    async (input: {
+      displayName?: string;
+      avatarFile?: File | null;
+      countryCode?: string | null;
+    }) => {
       if (!session?.user) return { error: 'Not signed in' };
 
       let avatarUrl: string | undefined;
       if (input.avatarFile) {
-        const ext = input.avatarFile.name.split('.').pop() || 'jpg';
-        const path = `${session.user.id}/avatar.${ext}`;
+        const rawExt = (input.avatarFile.name.split('.').pop() || 'jpg').toLowerCase();
+        const ext = ['jpg', 'jpeg', 'png', 'webp'].includes(rawExt) ? rawExt : 'jpg';
+        const path = `${session.user.id}/avatar-${Date.now()}.${ext}`;
         const { error: uploadError } = await supabase.storage
           .from('avatars')
-          .upload(path, input.avatarFile, { upsert: true });
+          .upload(path, input.avatarFile, {
+            upsert: true,
+            contentType: input.avatarFile.type || `image/${ext === 'jpg' ? 'jpeg' : ext}`,
+            cacheControl: '3600',
+          });
         if (uploadError) return { error: uploadError.message };
         const { data: pub } = supabase.storage.from('avatars').getPublicUrl(path);
-        avatarUrl = pub.publicUrl;
+        avatarUrl = `${pub.publicUrl}?v=${Date.now()}`;
       }
 
-      const patch: Record<string, string> = { updated_at: new Date().toISOString() };
+      const patch: Record<string, string | null> = { updated_at: new Date().toISOString() };
       if (input.displayName != null) patch.display_name = input.displayName.trim();
       if (avatarUrl) patch.avatar_url = avatarUrl;
+      if (input.countryCode !== undefined) {
+        patch.country_code = input.countryCode
+          ? input.countryCode.trim().toUpperCase()
+          : null;
+      }
 
       const { error } = await supabase.from('profiles').update(patch).eq('id', session.user.id);
       if (!error) await refreshProfile();

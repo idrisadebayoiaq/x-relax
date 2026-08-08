@@ -2,21 +2,37 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import {
+  ArrowLeft,
+  BadgeCheck,
+  Banknote,
+  FileWarning,
+  Flag,
+  Headphones,
+  LayoutDashboard,
+  LifeBuoy,
+  Megaphone,
+  Settings,
+  Shield,
+  Sparkles,
+  Users,
+  Wallet,
+} from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 
 const NAV = [
-  { href: '/admin', label: 'Overview' },
-  { href: '/admin/payments', label: 'Payments' },
-  { href: '/admin/moderation', label: 'Moderation' },
-  { href: '/admin/verifications', label: 'Verifications' },
-  { href: '/admin/withdrawals', label: 'Withdrawals' },
-  { href: '/admin/reports', label: 'Reports' },
-  { href: '/admin/support', label: 'Support' },
-  { href: '/admin/featured', label: 'Featured' },
-  { href: '/admin/announcements', label: 'Announcements' },
-  { href: '/admin/releases', label: 'App releases' },
-  { href: '/admin/settings', label: 'Settings' },
-  { href: '/admin/audit', label: 'Audit log' },
+  { href: '/admin', label: 'Overview', icon: LayoutDashboard },
+  { href: '/admin/payments', label: 'Payments', icon: Banknote },
+  { href: '/admin/moderation', label: 'Moderation', icon: FileWarning },
+  { href: '/admin/verifications', label: 'Verifications', icon: BadgeCheck },
+  { href: '/admin/withdrawals', label: 'Withdrawals', icon: Wallet },
+  { href: '/admin/reports', label: 'Reports', icon: Flag },
+  { href: '/admin/support', label: 'Support', icon: LifeBuoy },
+  { href: '/admin/featured', label: 'Featured', icon: Sparkles },
+  { href: '/admin/announcements', label: 'Announcements', icon: Megaphone },
+  { href: '/admin/releases', label: 'App releases', icon: Headphones },
+  { href: '/admin/settings', label: 'Settings', icon: Settings },
+  { href: '/admin/audit', label: 'Audit log', icon: Shield },
 ];
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
@@ -40,7 +56,9 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     );
   }
 
-  const items = isSuper ? [...NAV, { href: '/admin/admins', label: 'Admin team' }] : NAV;
+  const items = isSuper
+    ? [...NAV, { href: '/admin/admins', label: 'Admin team', icon: Users }]
+    : NAV;
 
   return (
     <div className="max-w-6xl mx-auto">
@@ -52,20 +70,25 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             Role: {adminProfile?.role ?? 'admin'} · only visible to admins
           </p>
         </div>
-        <Link href="/" className="chip">
-          ← Back to app
+        <Link href="/" className="chip inline-flex items-center gap-1.5">
+          <ArrowLeft size={14} />
+          Back to app
         </Link>
       </div>
 
-      <nav className="flex gap-2 overflow-x-auto pb-3 mb-6 border-b border-border">
+      <nav className="flex gap-2 overflow-x-auto rail-scroll pb-3 mb-6 border-b border-border">
         {items.map((item) => {
           const active = pathname === item.href;
+          const Icon = item.icon;
           return (
             <Link
               key={item.href}
               href={item.href}
-              className={`chip whitespace-nowrap ${active ? 'chip-active' : ''}`}
+              className={`chip whitespace-nowrap inline-flex items-center gap-1.5 ${
+                active ? 'chip-active' : ''
+              }`}
             >
+              <Icon size={14} strokeWidth={active ? 2.25 : 1.75} />
               {item.label}
             </Link>
           );

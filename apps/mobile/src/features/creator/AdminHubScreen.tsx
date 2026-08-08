@@ -23,6 +23,20 @@ export function AdminHubScreen() {
       onBack={() => navigation.goBack()}
       contentStyle={{ paddingBottom: 48 }}
     >
+      <SectionLabel>Listening</SectionLabel>
+      <OutlineRow
+        label="Playlists"
+        hint="Open Library playlists"
+        icon="musical-notes-outline"
+        onPress={() => navigation.navigate('PlaylistsList')}
+      />
+      <OutlineRow
+        label="Favourite Songs"
+        hint="Liked sounds"
+        icon="heart-outline"
+        onPress={() => navigation.navigate('FavouritesList')}
+      />
+
       <SectionLabel>Queues</SectionLabel>
       <OutlineRow
         label="Payments"

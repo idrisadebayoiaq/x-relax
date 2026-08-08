@@ -13,6 +13,7 @@ import { useRoute, useNavigation } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAppTheme } from '../../lib/useAppTheme';
 import { useAuth } from '../auth/AuthProvider';
+import { paymentMethodForCountry } from '../../lib/countries';
 import { supabase } from '../../lib/supabase';
 import type { PaymentMethod, SubscriptionPlan } from '../../types/database';
 import type { RootStackParamList } from '../../navigation/types';
@@ -33,15 +34,20 @@ type MethodInfo = {
 
 export function PaymentCheckoutScreen() {
   const { colors, isDark } = useAppTheme();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const route = useRoute<Props['route']>();
   const navigation = useNavigation();
+  const allowedMethod = paymentMethodForCountry(profile?.country_code);
   const [plan, setPlan] = useState<SubscriptionPlan | null>(null);
   const [methods, setMethods] = useState<Record<string, MethodInfo>>({});
-  const [method, setMethod] = useState<PaymentMethod>('ngn_opay');
+  const [method, setMethod] = useState<PaymentMethod>(allowedMethod);
   const [proofUri, setProofUri] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    setMethod(allowedMethod);
+  }, [allowedMethod]);
 
   useEffect(() => {
     (async () => {
@@ -149,8 +155,13 @@ export function PaymentCheckoutScreen() {
       onBack={() => navigation.goBack()}
     >
       <SectionLabel>Payment method</SectionLabel>
+      {!profile?.country_code ? (
+        <Text style={{ color: colors.textMuted, fontFamily: 'DMSans_400Regular', marginBottom: 10 }}>
+          Set your country in Profile so we show the correct payout details.
+        </Text>
+      ) : null}
       <View style={styles.row}>
-        {(['ngn_opay', 'usd_lead_bank'] as PaymentMethod[]).map((m) => {
+        {([allowedMethod] as PaymentMethod[]).map((m) => {
           const selected = method === m;
           return (
             <Pressable

@@ -2,11 +2,24 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import {
+  Download,
+  Gauge,
+  Heart,
+  Lock,
+  Moon,
+  Pause,
+  Play,
+  Repeat,
+  SkipBack,
+  SkipForward,
+} from 'lucide-react';
 import { CoverArt } from '@/components/CoverArt';
 import { SoundRatingPanel } from '@/components/SoundRatingPanel';
 import { formatMs, formatPlayCount, formatRatingSummary } from '@/lib/format';
 import { hasOfflineSound } from '@/lib/offline-storage';
 import { downloadSoundForWeb, removeDownloadForWeb } from '@/lib/web-downloads';
+import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/auth-context';
 import { usePlayer } from '@/lib/player-context';
 
@@ -17,7 +30,7 @@ function formatSleep(totalSec: number) {
 }
 
 export default function PlayerPage() {
-  const { user, isPremium, canDownloadOffline } = useAuth();
+  const { user, isPremium, canDownloadOffline, hasUnlimitedListening } = useAuth();
   const {
     current,
     isPlaying,
@@ -45,6 +58,7 @@ export default function PlayerPage() {
   const [downloaded, setDownloaded] = useState(false);
   const [downloadBusy, setDownloadBusy] = useState(false);
   const [stats, setStats] = useState({ avg: 0, count: 0, plays: 0 });
+  const [creatorName, setCreatorName] = useState<string | null>(null);
   const [sleepOpen, setSleepOpen] = useState(false);
   const [, setTick] = useState(0);
 
@@ -57,6 +71,7 @@ export default function PlayerPage() {
   useEffect(() => {
     if (!current) {
       setDownloaded(false);
+      setCreatorName(null);
       return;
     }
     setStats({
@@ -66,6 +81,20 @@ export default function PlayerPage() {
     });
     void hasOfflineSound(current.id).then(setDownloaded);
   }, [current?.id, current?.average_rating, current?.rating_count, current?.play_count]);
+
+  useEffect(() => {
+    if (!current?.creator_id) {
+      setCreatorName(null);
+      return;
+    }
+    const creatorId = current.creator_id;
+    createClient()
+      .rpc('get_creator_public_profile', { p_creator_id: creatorId })
+      .then(({ data }) => {
+        const name = (data as { display_name?: string | null } | null)?.display_name?.trim();
+        setCreatorName(name || null);
+      });
+  }, [current?.creator_id]);
 
   if (!current) {
     return (
@@ -151,9 +180,19 @@ export default function PlayerPage() {
 
       <div>
         <h1 className="text-2xl font-serif font-bold leading-tight">{current.title}</h1>
-        <p className="text-muted mt-1">
-          {current.description?.split('.')[0] || 'Ambient sound · X-Relax'}
-        </p>
+        {current.creator_id ? (
+          <Link
+            href={`/creator/${current.creator_id}`}
+            className="text-sm text-muted hover:text-foreground underline mt-1 inline-block"
+          >
+            {creatorName ?? 'View creator'}
+          </Link>
+        ) : null}
+        {current.description?.trim() ? (
+          <p className="text-muted mt-1 line-clamp-4">{current.description.trim()}</p>
+        ) : (
+          <p className="text-muted mt-1">Ambient sound · X-Relax</p>
+        )}
         <p className="text-sm text-muted mt-2">
           {formatPlayCount(stats.plays)}
           {ratingLine ? ` · ${ratingLine}` : ''}
@@ -161,8 +200,7 @@ export default function PlayerPage() {
         </p>
       </div>
 
-      {/* Action row: sleep / loop / speed / save (replaces lyrics/likes style) */}
-      <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 no-scrollbar">
+      <div className="flex gap-2 overflow-x-auto rail-scroll pb-1 -mx-1 px-1">
         <button
           type="button"
           className={`min-w-[4.75rem] h-16 rounded-2xl border px-2 flex flex-col items-center justify-center gap-1 text-xs font-medium ${
@@ -170,25 +208,37 @@ export default function PlayerPage() {
           }`}
           onClick={() => (isPremium ? setSleepOpen((v) => !v) : (window.location.href = '/premium'))}
         >
-          <span aria-hidden>☾</span>
-          {sleepRemaining != null ? formatSleep(sleepRemaining) : isPremium ? 'Sleep' : 'Sleep 🔒'}
+          <Moon size={18} />
+          {sleepRemaining != null
+            ? formatSleep(sleepRemaining)
+            : isPremium
+              ? 'Sleep'
+              : 'Sleep'}
+          {!isPremium ? <Lock size={10} className="opacity-60" /> : null}
         </button>
         <button
           type="button"
           className={`min-w-[4.75rem] h-16 rounded-2xl border px-2 flex flex-col items-center justify-center gap-1 text-xs font-medium ${
             isLooping || sleepEndsAt ? 'border-foreground bg-foreground/5' : 'border-border'
           }`}
-          onClick={toggleLoop}
+          onClick={() => {
+            if (!isPremium) {
+              window.location.href = '/premium';
+              return;
+            }
+            toggleLoop();
+          }}
         >
-          <span aria-hidden>🔁</span>
+          {isPremium ? <Repeat size={18} /> : <Lock size={18} />}
           Loop
+          {!isPremium ? <Lock size={10} className="opacity-60" /> : null}
         </button>
         <button
           type="button"
           className="min-w-[4.75rem] h-16 rounded-2xl border border-border px-2 flex flex-col items-center justify-center gap-1 text-xs font-medium"
           onClick={cycleRate}
         >
-          <span aria-hidden>⏱</span>
+          <Gauge size={18} />
           {rate.toFixed(2)}×
         </button>
         <button
@@ -198,8 +248,8 @@ export default function PlayerPage() {
           }`}
           onClick={() => void toggleFavourite()}
         >
-          <span aria-hidden>{isFavourite ? '♥' : '♡'}</span>
-          Save
+          <Heart size={18} className={isFavourite ? 'fill-current text-red-500' : ''} />
+          {isFavourite ? 'Liked' : 'Like'}
         </button>
         <button
           type="button"
@@ -209,7 +259,7 @@ export default function PlayerPage() {
           disabled={downloadBusy}
           onClick={() => void toggleDownload()}
         >
-          <span aria-hidden>{canDownloadOffline ? '↓' : '🔒'}</span>
+          {canDownloadOffline ? <Download size={18} /> : <Lock size={18} />}
           Offline
         </button>
       </div>
@@ -244,41 +294,67 @@ export default function PlayerPage() {
       </div>
 
       <div className="flex items-center justify-between px-1">
-        <button type="button" className="text-muted text-sm w-12 text-center" onClick={cycleRate}>
-          ⇄
-          <div className="text-[10px]">{rate.toFixed(2)}×</div>
+        <button
+          type="button"
+          className="text-muted text-sm w-12 inline-flex flex-col items-center gap-0.5"
+          onClick={cycleRate}
+        >
+          <Gauge size={18} />
+          <span className="text-[10px]">{rate.toFixed(2)}×</span>
         </button>
         <button
           type="button"
-          className="btn btn-outline px-4 py-3"
+          className="btn btn-outline px-4 py-3 inline-flex items-center justify-center disabled:opacity-40"
           disabled={!hasPrevious}
           onClick={() => void playPrevious()}
         >
-          ⏮
+          <SkipBack size={18} />
         </button>
         <button
           type="button"
-          className="btn btn-primary w-16 h-16 rounded-full text-xl"
+          className="btn btn-primary w-16 h-16 rounded-full inline-flex items-center justify-center"
           onClick={() => void togglePlay()}
         >
-          {isPlaying ? '❚❚' : '▶'}
+          {isPlaying ? (
+            <Pause size={26} fill="currentColor" />
+          ) : (
+            <Play size={26} fill="currentColor" className="ml-0.5" />
+          )}
         </button>
         <button
           type="button"
-          className="btn btn-outline px-4 py-3"
+          className="btn btn-outline px-4 py-3 inline-flex items-center justify-center disabled:opacity-40"
           disabled={!hasNext}
           onClick={() => void playNext()}
         >
-          ⏭
+          <SkipForward size={18} />
         </button>
         <button
           type="button"
-          className={`w-12 text-center text-lg ${isLooping || sleepEndsAt ? 'text-foreground' : 'text-muted'}`}
-          onClick={toggleLoop}
+          className={`w-12 inline-flex justify-center ${
+            isLooping || sleepEndsAt ? 'text-foreground' : 'text-muted'
+          }`}
+          onClick={() => {
+            if (!isPremium) {
+              window.location.href = '/premium';
+              return;
+            }
+            toggleLoop();
+          }}
+          aria-label="Loop"
         >
-          🔁
+          {isPremium ? <Repeat size={20} /> : <Lock size={18} />}
         </button>
       </div>
+
+      {!hasUnlimitedListening ? (
+        <Link
+          href="/premium"
+          className="block rounded-2xl border border-border px-4 py-3 text-sm font-medium bg-[rgba(201,162,39,0.12)]"
+        >
+          Upgrade to Premium for unlimited listening, loop, downloads, and Sleep Time →
+        </Link>
+      ) : null}
 
       <div className="flex justify-center gap-3">
         <button type="button" className="chip" onClick={() => void seekBy(-15000)}>

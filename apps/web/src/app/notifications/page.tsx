@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/auth-context';
@@ -14,6 +16,7 @@ type NotificationRow = {
 };
 
 export default function NotificationsPage() {
+  const router = useRouter();
   const { user } = useAuth();
   const [rows, setRows] = useState<NotificationRow[]>([]);
 
@@ -32,12 +35,17 @@ export default function NotificationsPage() {
     void load();
   }, [user?.id]);
 
-  const markRead = async (id: string) => {
+  const onOpen = async (row: NotificationRow) => {
     await createClient()
       .from('notifications')
       .update({ read_at: new Date().toISOString() })
-      .eq('id', id);
+      .eq('id', row.id);
     void load();
+
+    const creatorId = typeof row.data?.creator_id === 'string' ? row.data.creator_id : null;
+    if (creatorId) {
+      router.push(`/creator/${creatorId}`);
+    }
   };
 
   return (
@@ -52,11 +60,11 @@ export default function NotificationsPage() {
               key={row.id}
               type="button"
               className={`card w-full text-left p-4 ${row.read_at ? 'opacity-70' : ''}`}
-              onClick={() => void markRead(row.id)}
+              onClick={() => void onOpen(row)}
             >
               {fromUnverified ? (
                 <p className="text-xs text-amber-700 dark:text-amber-300 mb-1">
-                  ⚠ From an unverified admin
+                  From an unverified admin
                 </p>
               ) : null}
               <p className="font-semibold">{row.title}</p>
@@ -65,7 +73,14 @@ export default function NotificationsPage() {
             </button>
           );
         })}
-        {!rows.length ? <p className="text-muted">No notifications yet.</p> : null}
+        {!rows.length ? (
+          <p className="text-muted">
+            No notifications yet. Follow creators to get new release alerts.{' '}
+            <Link href="/" className="underline">
+              Browse home
+            </Link>
+          </p>
+        ) : null}
       </div>
     </div>
   );
