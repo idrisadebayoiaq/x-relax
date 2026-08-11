@@ -3,7 +3,7 @@ import * as Clipboard from 'expo-clipboard';
 import { supabase } from './supabase';
 
 const FALLBACK_APK =
-  'https://expo.dev/artifacts/eas/9Cpo9RDE3TIRP-bwfwC7GAJvQ9zFIBoaqrvfWp87Gu8.apk';
+  'https://expo.dev/artifacts/eas/9ENeBOe_0pO-aHptRC6eQcr5ltQKHmyFN6XMuUHLsUA.apk';
 
 export async function fetchAppDownloadUrl(): Promise<string> {
   const { data } = await supabase
