@@ -51,7 +51,7 @@ export default function CreatorUploadPage() {
       description: description.trim() || null,
       audio_path: audioPath,
       cover_url: coverPath ? supabase.storage.from('sounds').getPublicUrl(coverPath).data.publicUrl : null,
-      status: 'pending',
+      status: 'published',
       duration_seconds: 0,
     });
     if (categoryId) {
@@ -59,7 +59,7 @@ export default function CreatorUploadPage() {
     }
     setBusy(false);
     if (error) return alert(error.message);
-    alert('Submitted for moderation.');
+    alert('Published — your sound is live in the catalog.');
     router.push('/creator/sounds');
   };
 
@@ -77,7 +77,7 @@ export default function CreatorUploadPage() {
         </select>
         <label className="block text-sm">Audio file<input type="file" accept="audio/*" className="block mt-1" onChange={(e) => setAudio(e.target.files?.[0] ?? null)} required /></label>
         <label className="block text-sm">Cover image<input type="file" accept="image/*" className="block mt-1" onChange={(e) => setCover(e.target.files?.[0] ?? null)} /></label>
-        <button type="submit" className="btn btn-primary w-full" disabled={busy}>{busy ? 'Uploading…' : 'Submit for review'}</button>
+        <button type="submit" className="btn btn-primary w-full" disabled={busy}>{busy ? 'Uploading…' : 'Publish sound'}</button>
       </form>
     </div>
   );

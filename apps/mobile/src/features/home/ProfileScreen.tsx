@@ -24,6 +24,7 @@ import { useAuth } from '../auth/AuthProvider';
 import type { RootStackParamList } from '../../navigation/types';
 import { ScreenScaffold } from '../../ui/Screen';
 import { VerifiedBadge } from '../../ui/VerifiedBadge';
+import { ShareAppSheet } from '../../navigation/ShareAppSheet';
 
 const GOLD = '#C9A227';
 const GOLD_SOFT = 'rgba(201, 162, 39, 0.18)';
@@ -54,11 +55,15 @@ export function ProfileScreen() {
 
   const [name, setName] = useState(profile?.display_name ?? '');
   const [countryCode, setCountryCode] = useState(profile?.country_code ?? '');
+  const [bio, setBio] = useState(profile?.bio ?? '');
+  const [city, setCity] = useState(profile?.city ?? '');
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
+  const [bannerUri, setBannerUri] = useState<string | null>(null);
   const [avatarFailed, setAvatarFailed] = useState(false);
   const [isVerifiedCreator, setIsVerifiedCreator] = useState(false);
   const [busy, setBusy] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [stats, setStats] = useState<ProfileStats>({
     soundsSaved: 0,
     favourites: 0,
@@ -69,9 +74,19 @@ export function ProfileScreen() {
   useEffect(() => {
     setName(profile?.display_name ?? '');
     setCountryCode(profile?.country_code ?? '');
+    setBio(profile?.bio ?? '');
+    setCity(profile?.city ?? '');
     setAvatarUri(null);
+    setBannerUri(null);
     setAvatarFailed(false);
-  }, [profile?.display_name, profile?.avatar_url, profile?.country_code]);
+  }, [
+    profile?.display_name,
+    profile?.avatar_url,
+    profile?.banner_url,
+    profile?.bio,
+    profile?.city,
+    profile?.country_code,
+  ]);
 
   const loadCreator = useCallback(async () => {
     if (!user || !isCreator) {
@@ -136,9 +151,11 @@ export function ProfileScreen() {
     }, [refreshProfile, loadCreator, loadStats]),
   );
 
-  const showWhiteBadge = isPremium;
   const showBlueBadge =
-    isVerifiedCreator || !!adminProfile?.has_verified_badge || adminProfile?.role === 'super';
+    (isCreator || isAdmin) &&
+    (isVerifiedCreator || !!adminProfile?.has_verified_badge || adminProfile?.role === 'super');
+  /** White badge: verified Premium listeners only — never on creators/admins. */
+  const showWhiteBadge = !isCreator && !isAdmin && isPremium;
 
   /** Paid Premium that is still valid (not creator/admin perk alone). */
   const premiumActive = isPremium;
@@ -157,20 +174,36 @@ export function ProfileScreen() {
     }
   };
 
+  const pickBanner = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [16, 9],
+      quality: 0.85,
+    });
+    if (!result.canceled && result.assets[0]?.uri) {
+      setBannerUri(result.assets[0].uri);
+      setEditOpen(true);
+    }
+  };
+
   const onSave = async () => {
     const trimmed = name.trim();
     if (trimmed.length < 2) {
       Alert.alert('Name required', 'Enter at least 2 characters.');
       return;
     }
-    setBusy(true);
     if (!countryCode) {
       Alert.alert('Country required', 'Select your country for payments and analytics.');
       return;
     }
+    setBusy(true);
     const result = await updateProfile({
       displayName: trimmed,
       avatarUri: avatarUri ?? undefined,
+      bannerUri: bannerUri ?? undefined,
+      bio,
+      city,
       countryCode,
     });
     setBusy(false);
@@ -179,6 +212,7 @@ export function ProfileScreen() {
       return;
     }
     setAvatarUri(null);
+    setBannerUri(null);
     setEditOpen(false);
     Alert.alert('Saved', 'Your profile was updated.');
   };
@@ -200,25 +234,37 @@ export function ProfileScreen() {
       subtitle="Manage your account, sounds, and preferences."
       right={
         <Pressable onPress={() => setEditOpen(true)} hitSlop={10} style={styles.gearBtn}>
-          <Ionicons name="settings-outline" size={22} color={colors.text} />
+          <Ionicons name="create-outline" size={22} color={colors.text} />
         </Pressable>
       }
       contentStyle={{ paddingBottom: 48 }}
     >
       {/* Hero */}
       <View style={styles.heroWrap}>
-        <View style={styles.waveBehind} pointerEvents="none">
-          <LinearGradient
-            colors={
-              isDark
-                ? ['transparent', 'rgba(201,162,39,0.08)', 'transparent']
-                : ['transparent', 'rgba(201,162,39,0.12)', 'transparent']
-            }
-            start={{ x: 0, y: 0.5 }}
-            end={{ x: 1, y: 0.5 }}
-            style={StyleSheet.absoluteFill}
-          />
-        </View>
+        <Pressable onPress={pickBanner} style={styles.profileBannerPress}>
+          {bannerUri || profile?.banner_url ? (
+            <Image
+              source={{ uri: bannerUri ?? profile?.banner_url ?? undefined }}
+              style={styles.profileBanner}
+              contentFit="cover"
+            />
+          ) : (
+            <LinearGradient
+              colors={
+                isDark
+                  ? ['#1A1A1A', 'rgba(201,162,39,0.2)', '#121212']
+                  : ['#EDEAE4', 'rgba(201,162,39,0.25)', '#F7F4EE']
+              }
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.profileBanner}
+            />
+          )}
+          <View style={styles.bannerChip}>
+            <Ionicons name="image-outline" size={12} color="#fff" />
+            <Text style={styles.bannerChipText}>Edit banner</Text>
+          </View>
+        </Pressable>
 
         <Pressable onPress={pickAvatar} style={styles.avatarPress}>
           <LinearGradient
@@ -259,9 +305,16 @@ export function ProfileScreen() {
           {showWhiteBadge ? <VerifiedBadge size={18} tone="white" /> : null}
           {showBlueBadge ? <VerifiedBadge size={18} tone="blue" /> : null}
         </View>
-        <Text style={[styles.email, { color: colors.textMuted }]} numberOfLines={1}>
-          {user?.email ?? '—'}
-        </Text>
+        {profile?.bio?.trim() ? (
+          <Text style={[styles.bioText, { color: colors.textMuted }]} numberOfLines={3}>
+            {profile.bio.trim()}
+          </Text>
+        ) : null}
+        {(profile?.city || profile?.country_code) ? (
+          <Text style={[styles.locationText, { color: colors.textMuted }]} numberOfLines={1}>
+            {[profile?.city, countryName(profile?.country_code)].filter(Boolean).join(' · ')}
+          </Text>
+        ) : null}
 
         <View style={styles.badgeRow}>
           <View style={[styles.rolePill, { backgroundColor: isDark ? '#1C1C1C' : '#EDEAE4' }]}>
@@ -323,6 +376,26 @@ export function ProfileScreen() {
       {/* Account */}
       <SectionTitle>Account</SectionTitle>
       <View style={[styles.groupCard, { backgroundColor: cardBg, borderColor: colors.border }]}>
+        <MenuRow
+          icon="create"
+          iconBg={GOLD_SOFT}
+          iconColor={GOLD}
+          label="Edit profile"
+          hint="Banner, photo, bio, city, and country."
+          onPress={() => setEditOpen(true)}
+          colors={colors}
+          showDivider
+        />
+        <MenuRow
+          icon="share-social"
+          iconBg="rgba(34,197,94,0.16)"
+          iconColor="#22C55E"
+          label="Share app"
+          hint="Send the APK download link to friends."
+          onPress={() => setShareOpen(true)}
+          colors={colors}
+          showDivider
+        />
         {!isCreator ? (
           <MenuRow
             icon="mic"
@@ -391,27 +464,12 @@ export function ProfileScreen() {
       <SectionTitle>Preferences</SectionTitle>
       <View style={[styles.groupCard, { backgroundColor: cardBg, borderColor: colors.border }]}>
         <MenuRow
-          icon="moon"
+          icon="settings"
           iconBg="rgba(59,130,246,0.16)"
           iconColor="#3B82F6"
-          label="Playback & Downloads"
-          hint="Streaming quality, downloads, and storage."
-          onPress={() => navigation.navigate('Premium')}
-          colors={colors}
-          showDivider
-        />
-        <MenuRow
-          icon="options"
-          iconBg="rgba(20,184,166,0.16)"
-          iconColor="#14B8A6"
-          label="App Preferences"
-          hint="Theme follows your device settings."
-          onPress={() =>
-            Alert.alert(
-              'App Preferences',
-              'Theme currently follows your system appearance. More options coming soon.',
-            )
-          }
+          label="Settings"
+          hint="Theme, volume, downloads, privacy, and more."
+          onPress={() => navigation.navigate('Settings')}
           colors={colors}
         />
       </View>
@@ -465,45 +523,84 @@ export function ProfileScreen() {
             onPress={(e) => e.stopPropagation()}
           >
             <Text style={[styles.editTitle, { color: colors.text }]}>Edit profile</Text>
-            <Pressable onPress={pickAvatar} style={styles.editAvatarRow}>
-              {showRemoteAvatar ? (
-                <Image source={{ uri: avatarSource! }} style={styles.editAvatar} contentFit="cover" />
-              ) : (
-                <View style={[styles.editAvatar, { backgroundColor: '#333', alignItems: 'center', justifyContent: 'center' }]}>
-                  <Text style={{ color: '#fff', fontSize: 22, fontFamily: 'Fraunces_700Bold' }}>
-                    {initial}
-                  </Text>
-                </View>
-              )}
-              <Text style={{ color: GOLD, fontFamily: 'DMSans_500Medium' }}>Change photo</Text>
-            </Pressable>
-            <TextInput
-              value={name}
-              onChangeText={setName}
-              placeholder="Display name"
-              placeholderTextColor={colors.textMuted}
-              style={[
-                styles.editInput,
-                {
-                  color: colors.text,
-                  borderColor: colors.border,
-                  backgroundColor: isDark ? '#2C2C2E' : '#F3F0EA',
-                },
-              ]}
-            />
-            {!profile?.country_code ? (
-              <Text style={{ color: colors.textMuted, fontFamily: 'DMSans_400Regular', fontSize: 12 }}>
-                Country is required for payments and creator analytics.
-              </Text>
-            ) : null}
-            <Text style={{ color: colors.textMuted, fontSize: 12, fontFamily: 'DMSans_500Medium' }}>
-              Country · {countryName(countryCode || profile?.country_code)}
-            </Text>
             <ScrollView
-              style={{ maxHeight: 140 }}
+              style={{ maxHeight: 420 }}
               nestedScrollEnabled
               keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
             >
+              <Pressable onPress={pickBanner} style={styles.editBannerRow}>
+                {bannerUri || profile?.banner_url ? (
+                  <Image
+                    source={{ uri: bannerUri ?? profile?.banner_url! }}
+                    style={styles.editBanner}
+                    contentFit="cover"
+                  />
+                ) : (
+                  <View style={[styles.editBanner, { backgroundColor: isDark ? '#2C2C2E' : '#EDEAE4', alignItems: 'center', justifyContent: 'center' }]}>
+                    <Text style={{ color: GOLD, fontFamily: 'DMSans_500Medium' }}>Add banner</Text>
+                  </View>
+                )}
+              </Pressable>
+              <Pressable onPress={pickAvatar} style={styles.editAvatarRow}>
+                {showRemoteAvatar ? (
+                  <Image source={{ uri: avatarSource! }} style={styles.editAvatar} contentFit="cover" />
+                ) : (
+                  <View style={[styles.editAvatar, { backgroundColor: '#333', alignItems: 'center', justifyContent: 'center' }]}>
+                    <Text style={{ color: '#fff', fontSize: 22, fontFamily: 'Fraunces_700Bold' }}>
+                      {initial}
+                    </Text>
+                  </View>
+                )}
+                <Text style={{ color: GOLD, fontFamily: 'DMSans_500Medium' }}>Change photo</Text>
+              </Pressable>
+              <TextInput
+                value={name}
+                onChangeText={setName}
+                placeholder="Display name"
+                placeholderTextColor={colors.textMuted}
+                style={[
+                  styles.editInput,
+                  {
+                    color: colors.text,
+                    borderColor: colors.border,
+                    backgroundColor: isDark ? '#2C2C2E' : '#F3F0EA',
+                  },
+                ]}
+              />
+              <TextInput
+                value={bio}
+                onChangeText={setBio}
+                placeholder="Bio"
+                placeholderTextColor={colors.textMuted}
+                multiline
+                style={[
+                  styles.editInput,
+                  styles.editBio,
+                  {
+                    color: colors.text,
+                    borderColor: colors.border,
+                    backgroundColor: isDark ? '#2C2C2E' : '#F3F0EA',
+                  },
+                ]}
+              />
+              <TextInput
+                value={city}
+                onChangeText={setCity}
+                placeholder="City"
+                placeholderTextColor={colors.textMuted}
+                style={[
+                  styles.editInput,
+                  {
+                    color: colors.text,
+                    borderColor: colors.border,
+                    backgroundColor: isDark ? '#2C2C2E' : '#F3F0EA',
+                  },
+                ]}
+              />
+              <Text style={{ color: colors.textMuted, fontSize: 12, fontFamily: 'DMSans_500Medium', marginBottom: 6 }}>
+                Country / region · {countryName(countryCode || profile?.country_code)}
+              </Text>
               {COUNTRIES.map((c) => {
                 const selected = countryCode === c.code;
                 return (
@@ -537,6 +634,7 @@ export function ProfileScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+      <ShareAppSheet visible={shareOpen} onClose={() => setShareOpen(false)} />
     </ScreenScaffold>
   );
 }
@@ -629,17 +727,60 @@ const styles = StyleSheet.create({
   },
   heroWrap: {
     alignItems: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: 0,
     marginBottom: 18,
     marginTop: 4,
     position: 'relative',
   },
+  profileBannerPress: {
+    width: '100%',
+    marginBottom: -40,
+    position: 'relative',
+  },
+  profileBanner: {
+    width: '100%',
+    height: 120,
+    borderRadius: 16,
+  },
+  bannerChip: {
+    position: 'absolute',
+    right: 10,
+    bottom: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  bannerChipText: {
+    color: '#fff',
+    fontFamily: 'DMSans_500Medium',
+    fontSize: 11,
+  },
   waveBehind: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     top: 20,
     bottom: 40,
   },
-  avatarPress: { marginBottom: 14 },
+  avatarPress: { marginBottom: 14, marginTop: 8 },
+  bioText: {
+    fontFamily: 'DMSans_400Regular',
+    fontSize: 13,
+    marginTop: 8,
+    textAlign: 'center',
+    paddingHorizontal: 24,
+    lineHeight: 18,
+  },
+  locationText: {
+    fontFamily: 'DMSans_500Medium',
+    fontSize: 12,
+    marginTop: 6,
+  },
+  editBannerRow: { marginBottom: 14 },
+  editBanner: { width: '100%', height: 96, borderRadius: 12 },
+  editBio: { minHeight: 72, textAlignVertical: 'top' },
   avatarRing: {
     width: 104,
     height: 104,

@@ -15,6 +15,11 @@ export type CatalogSection = {
   data: Sound[];
 };
 
+export type ContinueItem = {
+  sound: Sound;
+  progressSeconds: number;
+};
+
 export async function loadHomeCatalog(userId?: string | null) {
   const supabase = createClient();
   const [
@@ -31,7 +36,7 @@ export async function loadHomeCatalog(userId?: string | null) {
     userId
       ? supabase
           .from('listening_history')
-          .select('sound_id, completed, sound:sounds(*)')
+          .select('sound_id, progress_seconds, completed, sound:sounds(*)')
           .eq('user_id', userId)
           .order('played_at', { ascending: false })
           .limit(12)
@@ -69,9 +74,12 @@ export async function loadHomeCatalog(userId?: string | null) {
     ? (recommendedSetting.value as string[])
     : [];
 
-  const continueListening = ((history as { completed?: boolean; sound?: Sound }[]) ?? [])
+  const continueListening: ContinueItem[] = ((history as { completed?: boolean; sound?: Sound; progress_seconds?: number }[]) ?? [])
     .filter((h) => !h.completed && h.sound)
-    .map((h) => h.sound as Sound);
+    .map((h) => ({
+      sound: h.sound as Sound,
+      progressSeconds: Number(h.progress_seconds ?? 0),
+    }));
 
   const recentHistorySoundIds = [
     ...new Set(
@@ -159,7 +167,7 @@ export async function loadHomeCatalog(userId?: string | null) {
       key: 'continue',
       title: 'Continue listening',
       subtitle: 'Pick up where you left off',
-      data: continueListening,
+      data: continueListening.map((c) => c.sound),
     },
     { key: 'featured', title: 'Featured for you', subtitle: 'Curated calm', data: featured.slice(0, 12) },
     {
@@ -172,5 +180,5 @@ export async function loadHomeCatalog(userId?: string | null) {
     ...categoryRails,
   ].filter((s) => s.data.length > 0);
 
-  return { all, sections, categories: visibleCategories };
+  return { all, sections, categories: visibleCategories, continueListening };
 }

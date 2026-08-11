@@ -39,6 +39,10 @@ type MixContextValue = {
   mixTitle: string;
   isMixActive: boolean;
   isMixPlaying: boolean;
+  /** Wall-clock seconds accumulated while the mix was playing this session. */
+  sessionElapsedSec: number;
+  /** When replaying a saved mix, stop after this many seconds (from save). */
+  savedDurationSec: number | null;
   sleepEndsAt: number | null;
   maxTracks: number;
   setMixTitle: (title: string) => void;
@@ -59,6 +63,8 @@ type MixContextValue = {
 const MixContext = createContext<MixContextValue | null>(null);
 
 const DEFAULT_VOLUME = 0.5;
+const MIX_SOUND_PREFIX = '__xrelax_mix__:';
+const MY_MIX_PLAYLIST = 'My Mix';
 
 export function MixProvider({ children }: { children: ReactNode }) {
   const { user, canUseMixes, freeMixLimit, isPremium, isAdmin, premiumMixLimit } = useAuth();
@@ -69,18 +75,38 @@ export function MixProvider({ children }: { children: ReactNode }) {
   const [mixTitle, setMixTitleState] = useState('My Mix');
   const [isMixPlaying, setIsMixPlaying] = useState(false);
   const [sleepEndsAt, setSleepEndsAt] = useState<number | null>(null);
+  const [sessionElapsedSec, setSessionElapsedSec] = useState(0);
+  const [savedDurationSec, setSavedDurationSec] = useState<number | null>(null);
+  const [linkedSoundId, setLinkedSoundId] = useState<string | null>(null);
 
   const layersRef = useRef(layers);
   const playingRef = useRef(false);
   const titleRef = useRef(mixTitle);
   const sleepRef = useRef<number | null>(null);
+  const sessionElapsedRef = useRef(0);
+  const tickStartedAtRef = useRef<number | null>(null);
+  const savedDurationRef = useRef<number | null>(null);
+  const replayElapsedRef = useRef(0);
 
   layersRef.current = layers;
   playingRef.current = isMixPlaying;
   titleRef.current = mixTitle;
   sleepRef.current = sleepEndsAt;
+  sessionElapsedRef.current = sessionElapsedSec;
+  savedDurationRef.current = savedDurationSec;
 
   const maxTracks = isPremium || isAdmin ? premiumMixLimit : Math.max(1, freeMixLimit);
+
+  const flushTick = useCallback(() => {
+    if (tickStartedAtRef.current == null) return;
+    const delta = (Date.now() - tickStartedAtRef.current) / 1000;
+    tickStartedAtRef.current = Date.now();
+    sessionElapsedRef.current += delta;
+    setSessionElapsedSec(sessionElapsedRef.current);
+    if (savedDurationRef.current != null && savedDurationRef.current > 0) {
+      replayElapsedRef.current += delta;
+    }
+  }, []);
 
   const syncPlayingFlag = useCallback((nextLayers: MixLayer[]) => {
     const playing = layersArePlaying(nextLayers);
@@ -89,16 +115,20 @@ export function MixProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const stopMix = useCallback(() => {
+    flushTick();
+    tickStartedAtRef.current = null;
     stopMixCompletely();
     setLayers((prev) => prev.map((l) => ({ ...l, player: undefined })));
     setIsMixPlaying(false);
     playingRef.current = false;
     setSleepEndsAt(null);
     sleepRef.current = null;
-  }, []);
+  }, [flushTick]);
 
   useEffect(() => {
     registerMixStopHandler(() => {
+      flushTick();
+      tickStartedAtRef.current = null;
       stopMixCompletely();
       setLayers((prev) => prev.map((l) => ({ ...l, player: undefined })));
       setIsMixPlaying(false);
@@ -109,7 +139,25 @@ export function MixProvider({ children }: { children: ReactNode }) {
       registerMixStopHandler(null);
       releaseMixLayers(layersRef.current);
     };
-  }, []);
+  }, [flushTick]);
+
+  // Live session timer + optional stop when replaying a saved duration.
+  useEffect(() => {
+    if (!isMixPlaying) {
+      flushTick();
+      tickStartedAtRef.current = null;
+      return;
+    }
+    tickStartedAtRef.current = Date.now();
+    const id = setInterval(() => {
+      flushTick();
+      const cap = savedDurationRef.current;
+      if (cap != null && cap > 0 && replayElapsedRef.current >= cap) {
+        stopMix();
+      }
+    }, 250);
+    return () => clearInterval(id);
+  }, [isMixPlaying, flushTick, stopMix]);
 
   useEffect(() => {
     if (!sleepEndsAt) return;
@@ -166,13 +214,15 @@ export function MixProvider({ children }: { children: ReactNode }) {
       setLayers(next);
       layersRef.current = next;
       if (!next.length) {
+        flushTick();
+        tickStartedAtRef.current = null;
         setIsMixPlaying(false);
         playingRef.current = false;
         return;
       }
       syncPlayingFlag(next);
     },
-    [syncPlayingFlag],
+    [syncPlayingFlag, flushTick],
   );
 
   const setTrackVolume = useCallback((soundId: string, volume: number) => {
@@ -197,6 +247,7 @@ export function MixProvider({ children }: { children: ReactNode }) {
       resumeMixLayers(layersRef.current);
       setIsMixPlaying(true);
       playingRef.current = true;
+      tickStartedAtRef.current = Date.now();
       return true;
     }
 
@@ -213,15 +264,18 @@ export function MixProvider({ children }: { children: ReactNode }) {
     layersRef.current = started;
     setIsMixPlaying(true);
     playingRef.current = true;
+    tickStartedAtRef.current = Date.now();
     setMixSessionMeta({ title: titleRef.current, id: mixId });
     return true;
   }, [canUseMixes, stopPlayback, mixId]);
 
   const pauseMix = useCallback(() => {
+    flushTick();
+    tickStartedAtRef.current = null;
     pauseMixLayers(layersRef.current);
     setIsMixPlaying(false);
     playingRef.current = false;
-  }, []);
+  }, [flushTick]);
 
   const toggleMixPlay = useCallback(async () => {
     if (playingRef.current) {
@@ -253,6 +307,14 @@ export function MixProvider({ children }: { children: ReactNode }) {
       setMixTitle(mix.title);
       setLayers(nextLayers);
       layersRef.current = nextLayers;
+      setLinkedSoundId(mix.sound_id ?? null);
+      const dur = Math.max(0, Number(mix.duration_seconds ?? 0));
+      setSavedDurationSec(dur > 0 ? dur : null);
+      savedDurationRef.current = dur > 0 ? dur : null;
+      // New play session timer starts at 0; replay cap uses saved duration.
+      setSessionElapsedSec(0);
+      sessionElapsedRef.current = 0;
+      replayElapsedRef.current = 0;
       setMixSessionMeta({ id: mix.id, title: mix.title });
       if (autoPlay) {
         const started = await startMixLayers(nextLayers, mix.title);
@@ -260,11 +322,29 @@ export function MixProvider({ children }: { children: ReactNode }) {
         layersRef.current = started;
         setIsMixPlaying(true);
         playingRef.current = true;
+        tickStartedAtRef.current = Date.now();
       }
       return true;
     },
     [canUseMixes, stopMix, stopPlayback, setMixTitle],
   );
+
+  const ensureMyMixPlaylist = useCallback(async (userId: string) => {
+    const { data: existing } = await supabase
+      .from('playlists')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('title', MY_MIX_PLAYLIST)
+      .maybeSingle();
+    if (existing?.id) return existing.id as string;
+    const { data: created, error } = await supabase
+      .from('playlists')
+      .insert({ user_id: userId, title: MY_MIX_PLAYLIST })
+      .select('id')
+      .single();
+    if (error || !created) throw new Error(error?.message ?? 'Could not create My Mix playlist');
+    return created.id as string;
+  }, []);
 
   const saveMix = useCallback(
     async (titleOverride?: string) => {
@@ -280,14 +360,33 @@ export function MixProvider({ children }: { children: ReactNode }) {
         Alert.alert('Empty mix', 'Add sounds before saving.');
         return null;
       }
+
+      flushTick();
+      const playedSec = Math.floor(sessionElapsedRef.current);
+      if (playedSec <= 0 && !savedDurationRef.current) {
+        Alert.alert(
+          'Play first',
+          'Start your mix and let it play for a bit, then save. The duration becomes the length of your mix.',
+        );
+        return null;
+      }
+
       const title = (titleOverride ?? titleRef.current).trim() || 'My Mix';
       setMixTitle(title);
+      const durationSeconds = Math.max(playedSec, savedDurationRef.current ?? 0, 1);
+      const coverUrl = layersRef.current[0]?.sound.cover_url ?? null;
+      const proxyAudioUrl = layersRef.current[0]?.sound.audio_url ?? null;
+      const proxyAudioPath = layersRef.current[0]?.sound.audio_path ?? null;
 
       let id = mixId;
       if (id) {
         const { error } = await supabase
           .from('mixes')
-          .update({ title, updated_at: new Date().toISOString() })
+          .update({
+            title,
+            duration_seconds: durationSeconds,
+            updated_at: new Date().toISOString(),
+          })
           .eq('id', id)
           .eq('user_id', user.id);
         if (error) {
@@ -298,7 +397,11 @@ export function MixProvider({ children }: { children: ReactNode }) {
       } else {
         const { data, error } = await supabase
           .from('mixes')
-          .insert({ user_id: user.id, title })
+          .insert({
+            user_id: user.id,
+            title,
+            duration_seconds: durationSeconds,
+          })
           .select('id')
           .single();
         if (error || !data) {
@@ -320,11 +423,90 @@ export function MixProvider({ children }: { children: ReactNode }) {
         Alert.alert('Save failed', trackErr.message);
         return null;
       }
+
+      // Personal draft sound so the mix appears in playlist "My Mix" like a track.
+      const desc = `${MIX_SOUND_PREFIX}${id}`;
+      let soundId = linkedSoundId;
+      const soundPayload = {
+        creator_id: user.id,
+        title,
+        description: desc,
+        cover_url: coverUrl,
+        audio_url: proxyAudioUrl,
+        audio_path: proxyAudioPath,
+        duration_seconds: durationSeconds,
+        status: 'draft' as const,
+        updated_at: new Date().toISOString(),
+      };
+
+      if (soundId) {
+        const { error: soundErr } = await supabase
+          .from('sounds')
+          .update(soundPayload)
+          .eq('id', soundId)
+          .eq('creator_id', user.id);
+        if (soundErr) {
+          // Recreate if missing
+          soundId = null;
+        }
+      }
+      if (!soundId) {
+        const { data: soundRow, error: soundErr } = await supabase
+          .from('sounds')
+          .insert(soundPayload)
+          .select('id')
+          .single();
+        if (soundErr || !soundRow) {
+          Alert.alert(
+            'Mix saved',
+            `"${title}" is in Library → My Mixes, but playlist link failed: ${soundErr?.message ?? 'unknown'}`,
+          );
+          setSavedDurationSec(durationSeconds);
+          savedDurationRef.current = durationSeconds;
+          setMixSessionMeta({ id, title });
+          return id;
+        }
+        soundId = soundRow.id as string;
+        setLinkedSoundId(soundId);
+      }
+
+      await supabase
+        .from('mixes')
+        .update({ sound_id: soundId, duration_seconds: durationSeconds })
+        .eq('id', id);
+
+      try {
+        const playlistId = await ensureMyMixPlaylist(user.id);
+        await supabase.from('playlist_items').upsert(
+          {
+            playlist_id: playlistId,
+            sound_id: soundId,
+            position: Date.now() % 100000,
+          },
+          { onConflict: 'playlist_id,sound_id' },
+        );
+      } catch (err) {
+        console.warn('My Mix playlist link failed', err);
+      }
+
+      setSavedDurationSec(durationSeconds);
+      savedDurationRef.current = durationSeconds;
       setMixSessionMeta({ id, title });
-      Alert.alert('Saved to Library', `"${title}" is in Library → My Mixes.`);
+      Alert.alert(
+        'Saved to My Mix',
+        `"${title}" · ${Math.floor(durationSeconds / 60)}:${String(durationSeconds % 60).padStart(2, '0')} — find it in Library → My Mixes and playlist “My Mix”.`,
+      );
       return id;
     },
-    [user, canUseMixes, mixId, setMixTitle],
+    [
+      user,
+      canUseMixes,
+      mixId,
+      setMixTitle,
+      flushTick,
+      linkedSoundId,
+      ensureMyMixPlaylist,
+    ],
   );
 
   const clearMix = useCallback(() => {
@@ -333,6 +515,12 @@ export function MixProvider({ children }: { children: ReactNode }) {
     layersRef.current = [];
     setMixId(null);
     setMixTitle('My Mix');
+    setSessionElapsedSec(0);
+    sessionElapsedRef.current = 0;
+    setSavedDurationSec(null);
+    savedDurationRef.current = null;
+    setLinkedSoundId(null);
+    replayElapsedRef.current = 0;
   }, [stopMix, setMixTitle]);
 
   const setSleepTimerMinutes = useCallback(
@@ -371,6 +559,8 @@ export function MixProvider({ children }: { children: ReactNode }) {
       mixTitle,
       isMixActive,
       isMixPlaying,
+      sessionElapsedSec,
+      savedDurationSec,
       sleepEndsAt,
       maxTracks,
       setMixTitle,
@@ -393,6 +583,8 @@ export function MixProvider({ children }: { children: ReactNode }) {
       mixTitle,
       isMixActive,
       isMixPlaying,
+      sessionElapsedSec,
+      savedDurationSec,
       sleepEndsAt,
       maxTracks,
       setMixTitle,

@@ -41,4 +41,5 @@ export type RootStackParamList = {
   AdminWithdrawals: undefined;
   Notifications: undefined;
   Legal: { doc: 'privacy' | 'terms' };
+  Settings: undefined;
 };

@@ -1,10 +1,17 @@
 import { ActivityIndicator, View } from 'react-native';
-import { NavigationContainer, DarkTheme, DefaultTheme } from '@react-navigation/native';
+import { useState } from 'react';
+import {
+  NavigationContainer,
+  DarkTheme,
+  DefaultTheme,
+} from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '../features/auth/AuthProvider';
 import { useAppTheme } from '../lib/useAppTheme';
 import { AuthNavigator } from './AuthNavigator';
 import { MainTabs } from './MainTabs';
+import { MiniPlayer } from './MiniPlayer';
+import { navigationRef } from './navigationRef';
 import { PlayerScreen } from '../features/player/PlayerScreen';
 import { PlaylistDetailScreen } from '../features/library/PlaylistDetailScreen';
 import { PlaylistsListScreen } from '../features/library/PlaylistsListScreen';
@@ -35,55 +42,63 @@ import { TrendingAllScreen } from '../features/library/TrendingAllScreen';
 import { PremiumScreen } from '../features/premium/PremiumScreen';
 import { CreatorScreen } from '../features/creator/CreatorScreen';
 import { CreatorProfileScreen } from '../features/creator/CreatorProfileScreen';
+import { SettingsScreen } from '../features/home/SettingsScreen';
 import type { RootStackParamList } from './types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
-function AppStack() {
+function AppStack({ stackRoute }: { stackRoute: string | undefined }) {
   const { colors } = useAppTheme();
+  const showFloating = !!stackRoute && stackRoute !== 'Tabs' && stackRoute !== 'Player';
+
   return (
-    <Stack.Navigator
-      screenOptions={{
-        headerShown: false,
-        contentStyle: { backgroundColor: colors.background },
-      }}
-    >
-      <Stack.Screen name="Tabs" component={MainTabs} />
-      <Stack.Screen name="Player" component={PlayerScreen} options={{ presentation: 'modal' }} />
-      <Stack.Screen name="PlaylistDetail" component={PlaylistDetailScreen} />
-      <Stack.Screen name="PlaylistsList" component={PlaylistsListScreen} />
-      <Stack.Screen name="FavouritesList" component={FavouritesListScreen} />
-      <Stack.Screen name="DownloadsList" component={DownloadsListScreen} />
-      <Stack.Screen name="LibraryMixes" component={LibraryMixesScreen} />
-      <Stack.Screen name="CategoryDetail" component={CategoryDetailScreen} />
-      <Stack.Screen name="CategoriesAll" component={CategoriesAllScreen} />
-      <Stack.Screen name="TrendingAll" component={TrendingAllScreen} />
-      <Stack.Screen name="Premium" component={PremiumScreen} />
-      <Stack.Screen name="Creator" component={CreatorScreen} />
-      <Stack.Screen name="CreatorProfile" component={CreatorProfileScreen} />
-      <Stack.Screen name="PaymentCheckout" component={PaymentCheckoutScreen} />
-      <Stack.Screen name="MyPayments" component={MyPaymentsScreen} />
-      <Stack.Screen name="AdminPayments" component={AdminPaymentsScreen} />
-      <Stack.Screen name="AdminHub" component={AdminHubScreen} />
-      <Stack.Screen name="MixStudio" component={MixStudioScreen} />
-      <Stack.Screen name="SleepTime" component={SleepTimeScreen} />
-      <Stack.Screen name="BecomeCreator" component={BecomeCreatorScreen} />
-      <Stack.Screen name="CreatorUpload" component={CreatorUploadScreen} />
-      <Stack.Screen name="CreatorSounds" component={CreatorSoundsScreen} />
-      <Stack.Screen name="CreatorVerification" component={CreatorVerificationScreen} />
-      <Stack.Screen name="CreatorWithdrawals" component={CreatorWithdrawalsScreen} />
-      <Stack.Screen name="AdminModeration" component={AdminModerationScreen} />
-      <Stack.Screen name="AdminVerifications" component={AdminVerificationsScreen} />
-      <Stack.Screen name="AdminWithdrawals" component={AdminWithdrawalsScreen} />
-      <Stack.Screen name="Notifications" component={NotificationsScreen} />
-      <Stack.Screen name="Legal" component={LegalScreen} />
-    </Stack.Navigator>
+    <View style={{ flex: 1 }}>
+      <Stack.Navigator
+        screenOptions={{
+          headerShown: false,
+          contentStyle: { backgroundColor: colors.background },
+        }}
+      >
+        <Stack.Screen name="Tabs" component={MainTabs} />
+        <Stack.Screen name="Player" component={PlayerScreen} options={{ presentation: 'modal' }} />
+        <Stack.Screen name="PlaylistDetail" component={PlaylistDetailScreen} />
+        <Stack.Screen name="PlaylistsList" component={PlaylistsListScreen} />
+        <Stack.Screen name="FavouritesList" component={FavouritesListScreen} />
+        <Stack.Screen name="DownloadsList" component={DownloadsListScreen} />
+        <Stack.Screen name="LibraryMixes" component={LibraryMixesScreen} />
+        <Stack.Screen name="CategoryDetail" component={CategoryDetailScreen} />
+        <Stack.Screen name="CategoriesAll" component={CategoriesAllScreen} />
+        <Stack.Screen name="TrendingAll" component={TrendingAllScreen} />
+        <Stack.Screen name="Premium" component={PremiumScreen} />
+        <Stack.Screen name="Creator" component={CreatorScreen} />
+        <Stack.Screen name="CreatorProfile" component={CreatorProfileScreen} />
+        <Stack.Screen name="PaymentCheckout" component={PaymentCheckoutScreen} />
+        <Stack.Screen name="MyPayments" component={MyPaymentsScreen} />
+        <Stack.Screen name="AdminPayments" component={AdminPaymentsScreen} />
+        <Stack.Screen name="AdminHub" component={AdminHubScreen} />
+        <Stack.Screen name="MixStudio" component={MixStudioScreen} />
+        <Stack.Screen name="SleepTime" component={SleepTimeScreen} />
+        <Stack.Screen name="BecomeCreator" component={BecomeCreatorScreen} />
+        <Stack.Screen name="CreatorUpload" component={CreatorUploadScreen} />
+        <Stack.Screen name="CreatorSounds" component={CreatorSoundsScreen} />
+        <Stack.Screen name="CreatorVerification" component={CreatorVerificationScreen} />
+        <Stack.Screen name="CreatorWithdrawals" component={CreatorWithdrawalsScreen} />
+        <Stack.Screen name="AdminModeration" component={AdminModerationScreen} />
+        <Stack.Screen name="AdminVerifications" component={AdminVerificationsScreen} />
+        <Stack.Screen name="AdminWithdrawals" component={AdminWithdrawalsScreen} />
+        <Stack.Screen name="Notifications" component={NotificationsScreen} />
+        <Stack.Screen name="Legal" component={LegalScreen} />
+        <Stack.Screen name="Settings" component={SettingsScreen} />
+      </Stack.Navigator>
+      {showFloating ? <MiniPlayer floating /> : null}
+    </View>
   );
 }
 
 export function RootNavigator() {
   const { session, loading } = useAuth();
   const { colors, isDark } = useAppTheme();
+  const [stackRoute, setStackRoute] = useState<string | undefined>('Tabs');
 
   if (loading) {
     return (
@@ -113,8 +128,15 @@ export function RootNavigator() {
   };
 
   return (
-    <NavigationContainer theme={navTheme}>
-      {session ? <AppStack /> : <AuthNavigator />}
+    <NavigationContainer
+      ref={navigationRef}
+      theme={navTheme}
+      onStateChange={(state) => {
+        const stack = state?.routes[state.index ?? 0];
+        setStackRoute(stack?.name);
+      }}
+    >
+      {session ? <AppStack stackRoute={stackRoute} /> : <AuthNavigator />}
     </NavigationContainer>
   );
 }

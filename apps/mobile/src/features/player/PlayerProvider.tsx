@@ -13,7 +13,7 @@ import {
   type AudioPlayer,
   type AudioStatus,
 } from 'expo-audio';
-import { Alert } from 'react-native';
+import { Alert, AppState, type AppStateStatus } from 'react-native';
 import { supabase } from '../../lib/supabase';
 import {
   claimDailySoundPlay,
@@ -23,6 +23,13 @@ import {
 } from '../../lib/dailyListenLimit';
 import { stopExternalMixPlayback } from '../../lib/mixPlayback';
 import { claimExclusiveAudioFocus } from '../../lib/audioSession';
+import {
+  clearPlaybackSession,
+  loadPlaybackSession,
+  savePlaybackSession,
+} from '../../lib/playbackSession';
+import { resolvePlayableUrl } from '../../lib/downloads';
+import { isDeviceOnline, loadAppSettings } from '../../lib/appSettings';
 import { useAuth } from '../auth/AuthProvider';
 import type { Sound } from '../../types/database';
 
@@ -30,6 +37,8 @@ export type PlaySoundOptions = {
   queue?: Sound[];
   queueIndex?: number;
   queueLabel?: string;
+  startPositionMs?: number;
+  autoPlay?: boolean;
 };
 
 type PlayerContextValue = {
@@ -49,6 +58,7 @@ type PlayerContextValue = {
   playNext: () => Promise<boolean>;
   playPrevious: () => Promise<boolean>;
   stopPlayback: () => Promise<void>;
+  dismissMiniPlayer: () => Promise<void>;
   togglePlay: () => Promise<void>;
   seekBy: (deltaMs: number) => Promise<void>;
   seekTo: (positionMs: number) => Promise<void>;
@@ -98,16 +108,53 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const lastPosSecRef = useRef(0);
   const lastStatusAtRef = useRef(0);
   const sleepLoopRef = useRef(false);
+  const positionMsRef = useRef(0);
+  const restoringRef = useRef(false);
   currentRef.current = current;
   sleepEndsAtRef.current = sleepEndsAt;
   queueRef.current = queue;
   queueIndexRef.current = queueIndex;
   queueLabelRef.current = queueLabel;
   isLoopingRef.current = isLooping;
+  positionMsRef.current = positionMs;
+
+  const persistSession = useCallback(async () => {
+    const track = currentRef.current;
+    if (!track?.audio_url) {
+      await clearPlaybackSession();
+      return;
+    }
+    await savePlaybackSession({
+      sound: track,
+      queue: queueRef.current.length ? queueRef.current : [track],
+      queueIndex: queueIndexRef.current,
+      queueLabel: queueLabelRef.current,
+      positionMs: Math.max(0, positionMsRef.current),
+      updatedAt: Date.now(),
+    });
+  }, []);
 
   useEffect(() => {
     void claimExclusiveAudioFocus();
   }, []);
+
+  useEffect(() => {
+    const onChange = (next: AppStateStatus) => {
+      if (next === 'background' || next === 'inactive') {
+        void persistSession();
+      }
+    };
+    const sub = AppState.addEventListener('change', onChange);
+    return () => sub.remove();
+  }, [persistSession]);
+
+  useEffect(() => {
+    if (!current) return;
+    const id = setInterval(() => {
+      void persistSession();
+    }, 8000);
+    return () => clearInterval(id);
+  }, [current, persistSession]);
 
   useEffect(() => {
     if (!sleepEndsAt) return;
@@ -267,11 +314,22 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     queueRef.current = [];
     queueIndexRef.current = 0;
     queueLabelRef.current = null;
+    await clearPlaybackSession();
   }, [unload]);
 
+  const dismissMiniPlayer = useCallback(async () => {
+    await stopPlayback();
+  }, [stopPlayback]);
+
   const loadSound = useCallback(
-    async (sound: Sound, index: number, nextQueue: Sound[], nextQueueLabel?: string | null) => {
-      if (!sound.audio_url) return false;
+    async (
+      sound: Sound,
+      index: number,
+      nextQueue: Sound[],
+      nextQueueLabel?: string | null,
+      opts?: { startPositionMs?: number; autoPlay?: boolean },
+    ) => {
+      if (!sound.audio_url && !(await resolvePlayableUrl(sound))) return false;
 
       await unload();
       listenSecondsRef.current = 0;
@@ -291,11 +349,22 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       const loopForSleep =
         isPremium && sleepEndsAtRef.current != null && Date.now() < sleepEndsAtRef.current;
       const shouldLoop = loopForSleep || isLooping;
+      const autoPlay = opts?.autoPlay !== false;
+      const startMs = Math.max(0, opts?.startPositionMs ?? 0);
 
-      const player = createAudioPlayer({ uri: sound.audio_url }, { updateInterval: 500 });
+      const uri = (await resolvePlayableUrl(sound)) ?? sound.audio_url;
+      if (!uri) return false;
+
+      const settings = await loadAppSettings();
+      const player = createAudioPlayer({ uri }, { updateInterval: 500 });
       player.loop = shouldLoop;
       player.shouldCorrectPitch = true;
       player.setPlaybackRate(rate);
+      try {
+        player.volume = settings.volume;
+      } catch {
+        /* ignore */
+      }
       statusSubRef.current = player.addListener(
         'playbackStatusUpdate',
         onPlaybackStatus,
@@ -317,10 +386,31 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
           showSeekBackward: true,
         },
       );
-      player.play();
+
       soundRef.current = player;
       setCurrent(sound);
-      setIsPlaying(true);
+      setPositionMs(startMs);
+      positionMsRef.current = startMs;
+
+      if (startMs > 0) {
+        try {
+          await player.seekTo(startMs / 1000);
+        } catch {
+          /* ignore */
+        }
+      }
+
+      if (autoPlay) {
+        player.play();
+        setIsPlaying(true);
+      } else {
+        try {
+          player.pause();
+        } catch {
+          /* ignore */
+        }
+        setIsPlaying(false);
+      }
 
       if (user) {
         const { data } = await supabase
@@ -334,6 +424,15 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         setIsFavourite(false);
       }
 
+      void savePlaybackSession({
+        sound,
+        queue: nextQueue,
+        queueIndex: index,
+        queueLabel: nextQueueLabel ?? null,
+        positionMs: startMs,
+        updatedAt: Date.now(),
+      });
+
       return true;
     },
     [unload, isLooping, rate, onPlaybackStatus, user, isPremium],
@@ -341,46 +440,97 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   const playSound = useCallback(
     async (sound: Sound, options?: PlaySoundOptions): Promise<boolean> => {
-      if (!sound.audio_url) return false;
+      const uri = await resolvePlayableUrl(sound);
+      if (!uri) {
+        const online = await isDeviceOnline();
+        Alert.alert(
+          online ? 'Unavailable' : 'Offline',
+          online
+            ? 'This sound has no audio file.'
+            : 'You are offline. Only downloaded sounds can be played. Open Library → Downloads.',
+        );
+        return false;
+      }
+
+      const playableSound = { ...sound, audio_url: uri };
 
       stopExternalMixPlayback();
       await claimExclusiveAudioFocus();
 
       const userId = user?.id ?? null;
-      const claim = await claimDailySoundPlay(userId, sound.id, hasUnlimitedListening);
-      if (!claim.allowed) {
-        Alert.alert('Daily limit reached', DAILY_LIMIT_MESSAGE);
-        return false;
+      const skipDailyClaim = options?.autoPlay === false;
+      const online = await isDeviceOnline();
+      if (!skipDailyClaim && online) {
+        const claim = await claimDailySoundPlay(userId, sound.id, hasUnlimitedListening);
+        if (!claim.allowed) {
+          Alert.alert('Daily limit reached', DAILY_LIMIT_MESSAGE);
+          return false;
+        }
       }
 
-      const unlockedToday = await getTodayPlayedSoundIds(userId);
-      // Include the sound we just claimed so queue filtering allows its siblings in remaining slots.
+      const unlockedToday = online
+        ? await getTodayPlayedSoundIds(userId)
+        : [sound.id];
       if (!unlockedToday.includes(sound.id)) unlockedToday.push(sound.id);
 
-      const rawQueue = (options?.queue ?? [sound]).filter((item) => !!item.audio_url);
-      const playableQueue = filterQueueForDailyLimit(
-        rawQueue,
-        unlockedToday,
-        hasUnlimitedListening,
+      const rawQueue = (options?.queue ?? [playableSound]).map((item) =>
+        item.id === playableSound.id ? playableSound : item,
       );
+      const playableQueue = online
+        ? filterQueueForDailyLimit(rawQueue, unlockedToday, hasUnlimitedListening)
+        : rawQueue.filter((item) => !!item.audio_url);
+
       if (!playableQueue.some((item) => item.id === sound.id)) {
-        Alert.alert('Daily limit reached', DAILY_LIMIT_MESSAGE);
-        return false;
+        if (!skipDailyClaim && online) {
+          Alert.alert('Daily limit reached', DAILY_LIMIT_MESSAGE);
+          return false;
+        }
       }
+
+      const queueForLoad = playableQueue.some((item) => item.id === sound.id)
+        ? playableQueue
+        : rawQueue.length
+          ? rawQueue
+          : [playableSound];
 
       const index = Math.max(
         0,
-        playableQueue.findIndex((item) => item.id === sound.id),
+        queueForLoad.findIndex((item) => item.id === sound.id),
       );
       const label =
         options?.queueLabel ??
         (options?.queue ? queueLabelRef.current : null) ??
-        (playableQueue.length > 1 ? 'Queue' : null);
+        (queueForLoad.length > 1 ? 'Queue' : null);
 
-      return loadSound(sound, index, playableQueue, label);
+      return loadSound(playableSound, index, queueForLoad, label, {
+        startPositionMs: options?.startPositionMs,
+        autoPlay: options?.autoPlay,
+      });
     },
     [user, hasUnlimitedListening, loadSound],
   );
+
+  useEffect(() => {
+    if (restoringRef.current) return;
+    restoringRef.current = true;
+    let cancelled = false;
+    (async () => {
+      const session = await loadPlaybackSession();
+      if (cancelled || !session?.sound?.audio_url) return;
+      await playSound(session.sound, {
+        queue: session.queue?.length ? session.queue : [session.sound],
+        queueIndex: session.queueIndex,
+        queueLabel: session.queueLabel ?? undefined,
+        startPositionMs: session.positionMs,
+        autoPlay: false,
+      });
+    })().catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+    // Restore once on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const playNext = useCallback(async (): Promise<boolean> => {
     const q = queueRef.current;
@@ -426,12 +576,16 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       audio.pause();
       // Keep exclusive focus so other apps (Spotify, etc.) do not auto-resume.
       await claimExclusiveAudioFocus();
+      setIsPlaying(false);
+      void persistSession();
     } else {
       await claimExclusiveAudioFocus();
       lastStatusAtRef.current = Date.now();
       audio.play();
+      setIsPlaying(true);
+      void persistSession();
     }
-  }, [flushPlayCount]);
+  }, [flushPlayCount, persistSession]);
 
   const seekBy = useCallback(async (deltaMs: number) => {
     const audio = soundRef.current;
@@ -545,6 +699,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       playNext,
       playPrevious,
       stopPlayback,
+      dismissMiniPlayer,
       togglePlay,
       seekBy,
       seekTo,
@@ -569,6 +724,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       playNext,
       playPrevious,
       stopPlayback,
+      dismissMiniPlayer,
       togglePlay,
       seekBy,
       seekTo,

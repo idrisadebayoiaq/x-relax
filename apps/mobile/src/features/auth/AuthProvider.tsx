@@ -11,6 +11,11 @@ import { AppState, type AppStateStatus } from 'react-native';
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../../lib/supabase';
 import { presentWelcomePushIfNeeded, registerForPushNotifications } from '../../lib/push';
+import {
+  cacheProfileSnapshot,
+  clearOfflineUserCache,
+  loadCachedProfile,
+} from '../../lib/offlineCache';
 import type { AdminProfile, Profile, SignupRole } from '../../types/database';
 
 type AuthContextValue = {
@@ -51,6 +56,9 @@ type AuthContextValue = {
   updateProfile: (input: {
     displayName?: string;
     avatarUri?: string | null;
+    bannerUri?: string | null;
+    bio?: string | null;
+    city?: string | null;
     countryCode?: string | null;
   }) => Promise<{ error: string | null }>;
 };
@@ -101,37 +109,58 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setProfile(null);
       setAdminProfile(null);
       setIsPremium(false);
+      await clearOfflineUserCache();
       return;
     }
 
-    let nextProfile = await fetchProfile(user.id);
-    if (!nextProfile) {
-      await new Promise((r) => setTimeout(r, 400));
-      nextProfile = await fetchProfile(user.id);
-    }
-    setProfile(nextProfile);
-    setAdminProfile(await fetchAdminProfile(user.id));
-
-    const { data: premium } = await supabase.rpc('user_has_premium', { uid: user.id });
-    setIsPremium(!!premium);
-
-    const { data: flags } = await supabase
-      .from('app_settings')
-      .select('value')
-      .eq('key', 'feature_flags')
-      .maybeSingle();
-    const limit = Number((flags?.value as any)?.free_mix_track_limit ?? 2);
-    setFreeMixLimit(Number.isFinite(limit) ? limit : 2);
-    const requirePremium = (flags?.value as any)?.mixes_require_premium;
-    setMixesRequirePremium(requirePremium !== false);
-
-    // Best-effort FCM/APNs registration + welcome system notification
-    registerForPushNotifications().then(async (result) => {
-      if (result.error) {
-        console.warn('Push registration:', result.error);
-        await presentWelcomePushIfNeeded();
+    try {
+      let nextProfile = await fetchProfile(user.id);
+      if (!nextProfile) {
+        await new Promise((r) => setTimeout(r, 400));
+        nextProfile = await fetchProfile(user.id);
       }
-    });
+
+      // Offline / network failure: fall back to last cached profile so the app still opens.
+      if (!nextProfile) {
+        const cached = await loadCachedProfile();
+        if (cached.profile) {
+          setProfile(cached.profile);
+          setIsPremium(cached.isPremium);
+          return;
+        }
+      }
+
+      setProfile(nextProfile);
+      setAdminProfile(await fetchAdminProfile(user.id));
+
+      const { data: premium } = await supabase.rpc('user_has_premium', { uid: user.id });
+      setIsPremium(!!premium);
+      await cacheProfileSnapshot(nextProfile, !!premium);
+
+      const { data: flags } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'feature_flags')
+        .maybeSingle();
+      const limit = Number((flags?.value as any)?.free_mix_track_limit ?? 2);
+      setFreeMixLimit(Number.isFinite(limit) ? limit : 2);
+      const requirePremium = (flags?.value as any)?.mixes_require_premium;
+      setMixesRequirePremium(requirePremium !== false);
+
+      registerForPushNotifications().then(async (result) => {
+        if (result.error) {
+          console.warn('Push registration:', result.error);
+          await presentWelcomePushIfNeeded();
+        }
+      });
+    } catch (err) {
+      console.warn('loadUserData offline fallback', err);
+      const cached = await loadCachedProfile();
+      if (cached.profile) {
+        setProfile(cached.profile);
+        setIsPremium(cached.isPremium);
+      }
+    }
   }, []);
 
   const refreshProfile = useCallback(async () => {
@@ -243,9 +272,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (input: {
       displayName?: string;
       avatarUri?: string | null;
+      bannerUri?: string | null;
+      bio?: string | null;
+      city?: string | null;
       countryCode?: string | null;
     }) => {
       if (!session?.user) return { error: 'Not signed in' };
+
+      const readLocalImage = async (uri: string) => {
+        let body: ArrayBuffer;
+        try {
+          const res = await fetch(uri);
+          body = await res.arrayBuffer();
+          if (!body.byteLength) throw new Error('empty');
+        } catch {
+          const FileSystem = await import('expo-file-system/legacy');
+          const base64 = await FileSystem.readAsStringAsync(uri, {
+            encoding: FileSystem.EncodingType.Base64,
+          });
+          const binary = globalThis.atob(base64);
+          const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+          body = bytes.buffer;
+        }
+        return body;
+      };
 
       let avatarUrl: string | undefined;
       if (input.avatarUri) {
@@ -253,27 +304,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const ext = ['jpg', 'jpeg', 'png', 'webp'].includes(rawExt) ? rawExt : 'jpg';
         const contentType =
           ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
-        // Unique path so CDN/clients don't keep a stale avatar after replace
         const path = `${session.user.id}/avatar-${Date.now()}.${ext}`;
-
         let body: ArrayBuffer;
         try {
-          const res = await fetch(input.avatarUri);
-          body = await res.arrayBuffer();
-          if (!body.byteLength) throw new Error('empty');
+          body = await readLocalImage(input.avatarUri);
         } catch {
-          try {
-            const FileSystem = await import('expo-file-system/legacy');
-            const base64 = await FileSystem.readAsStringAsync(input.avatarUri, {
-              encoding: FileSystem.EncodingType.Base64,
-            });
-            const binary = globalThis.atob(base64);
-            const bytes = new Uint8Array(binary.length);
-            for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
-            body = bytes.buffer;
-          } catch {
-            return { error: 'Could not read the selected image.' };
-          }
+          return { error: 'Could not read the selected image.' };
         }
         if (!body.byteLength) return { error: 'Could not read the selected image.' };
 
@@ -286,10 +322,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         avatarUrl = `${pub.publicUrl}?v=${Date.now()}`;
       }
 
+      let bannerUrl: string | undefined;
+      if (input.bannerUri) {
+        const path = `${session.user.id}/banners/${Date.now()}.jpg`;
+        let body: ArrayBuffer;
+        try {
+          body = await readLocalImage(input.bannerUri);
+        } catch {
+          return { error: 'Could not read the banner image.' };
+        }
+        const { error: uploadError } = await supabase.storage
+          .from('covers')
+          .upload(path, body, { upsert: true, contentType: 'image/jpeg', cacheControl: '3600' });
+        if (uploadError) return { error: uploadError.message };
+        const { data: pub } = supabase.storage.from('covers').getPublicUrl(path);
+        bannerUrl = `${pub.publicUrl}?v=${Date.now()}`;
+      }
+
       const patch: {
         id?: string;
         display_name?: string;
         avatar_url?: string;
+        banner_url?: string;
+        bio?: string | null;
+        city?: string | null;
         country_code?: string | null;
         updated_at: string;
       } = {
@@ -297,6 +353,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       };
       if (input.displayName != null) patch.display_name = input.displayName.trim();
       if (avatarUrl) patch.avatar_url = avatarUrl;
+      if (bannerUrl) patch.banner_url = bannerUrl;
+      if (input.bio !== undefined) patch.bio = input.bio?.trim() || null;
+      if (input.city !== undefined) patch.city = input.city?.trim() || null;
       if (input.countryCode !== undefined) {
         patch.country_code = input.countryCode
           ? input.countryCode.trim().toUpperCase()
@@ -312,12 +371,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           id: session.user.id,
           display_name: patch.display_name ?? session.user.email?.split('@')[0] ?? 'Listener',
           avatar_url: patch.avatar_url ?? null,
+          banner_url: patch.banner_url ?? null,
+          bio: patch.bio ?? null,
+          city: patch.city ?? null,
+          country_code: patch.country_code ?? null,
           role: 'listener',
           premium_status: 'none',
           theme_preference: 'system',
           updated_at: patch.updated_at,
         });
         error = upsert.error;
+      }
+
+      if (!error && (bannerUrl || input.bio !== undefined)) {
+        const creatorPatch: Record<string, string | null> = {
+          updated_at: new Date().toISOString(),
+        };
+        if (bannerUrl) creatorPatch.banner_url = bannerUrl;
+        if (input.bio !== undefined) creatorPatch.bio = input.bio?.trim() || null;
+        await supabase
+          .from('creator_profiles')
+          .update(creatorPatch)
+          .eq('user_id', session.user.id);
       }
 
       if (!error) await refreshProfile();

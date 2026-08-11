@@ -29,6 +29,12 @@ import {
 import { CATEGORY_ICONS } from '../../lib/categoryRails';
 import { useAuth } from '../auth/AuthProvider';
 import { usePlayer } from '../player/PlayerProvider';
+import { useAppSettings } from '../../lib/AppSettingsProvider';
+import {
+  cacheContinueHistory,
+  loadCachedContinueHistory,
+  loadCachedDownloads,
+} from '../../lib/offlineCache';
 import { WelcomeBanner } from './WelcomeBanner';
 import { ListeningTipBanner } from './ListeningTipBanner';
 import { CoverArt } from './CoverArt';
@@ -40,6 +46,8 @@ import { moodPaletteFor } from '../../lib/format';
 import type { Playlist, Sound } from '../../types/database';
 import type { MainTabParamList, RootStackParamList } from '../../navigation/types';
 import { Image } from 'expo-image';
+
+const GOLD = '#C9A227';
 
 type Section = {
   key: string;
@@ -130,7 +138,8 @@ function pickHomeCategories(cats: CategoryRow[], limit = 5): CategoryRow[] {
 export function HomeScreen() {
   const { colors, isDark } = useAppTheme();
   const insets = useSafeAreaInsets();
-  const { profile, user, isPremium, hasUnlimitedListening } = useAuth();
+  const { profile, user, isPremium, isCreator, isAdmin, hasUnlimitedListening } = useAuth();
+  const { online } = useAppSettings();
   const { playSound, toggleFavourite, isFavourite, current } = usePlayer();
   const navigation = useNavigation<HomeNavigation>();
 
@@ -152,6 +161,49 @@ export function HomeScreen() {
   const load = useCallback(async () => {
     setLoadError(null);
     try {
+      if (!online) {
+        const [downloads, history] = await Promise.all([
+          loadCachedDownloads(),
+          loadCachedContinueHistory(),
+        ]);
+        const offlineSounds = downloads.map((d) => ({ ...d.sound, audio_url: d.localUri }));
+        setCatalogCount(offlineSounds.length);
+        setSections(
+          offlineSounds.length
+            ? [
+                {
+                  key: 'offline-downloads',
+                  title: 'Downloaded',
+                  subtitle: 'Available offline',
+                  data: offlineSounds,
+                },
+              ]
+            : [],
+        );
+        setTrending(offlineSounds.slice(0, 10));
+        setContinueItems(
+          history
+            .filter((h) => !h.completed && h.sound)
+            .map((h) => {
+              const offline = offlineSounds.find((s) => s.id === h.soundId);
+              if (!offline) return null;
+              return {
+                sound: offline,
+                progressSeconds: h.progressSeconds,
+              };
+            })
+            .filter(Boolean) as ContinueItem[],
+        );
+        setCategories([]);
+        setSuggestedPlaylists([]);
+        setLoadError(
+          offlineSounds.length
+            ? null
+            : 'You are offline. Download sounds on Wi‑Fi while online to listen here.',
+        );
+        return;
+      }
+
       const [
         { data: published, error: soundsErr },
         { data: cats },
@@ -223,6 +275,15 @@ export function HomeScreen() {
           progressSeconds: Number(h.progress_seconds ?? 0),
         }));
       setContinueItems(continueRaw);
+      void cacheContinueHistory(
+        continueRaw.map((c) => ({
+          soundId: c.sound.id,
+          progressSeconds: c.progressSeconds,
+          completed: false,
+          playedAt: new Date().toISOString(),
+          sound: c.sound,
+        })),
+      );
 
       const trendingSorted = [...all].sort((a, b) => b.play_count - a.play_count);
       setTrending(trendingSorted.slice(0, 10));
@@ -328,7 +389,7 @@ export function HomeScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [user]);
+  }, [user, online]);
 
   useFocusEffect(
     useCallback(() => {
@@ -350,13 +411,19 @@ export function HomeScreen() {
 
   const homeCategories = useMemo(() => pickHomeCategories(categories, 5), [categories]);
 
-  const openSound = async (sound: Sound, queue?: Sound[], queueLabel?: string) => {
+  const openSound = async (
+    sound: Sound,
+    queue?: Sound[],
+    queueLabel?: string,
+    startPositionMs?: number,
+  ) => {
     const playableQueue = queue ?? [sound];
     const index = playableQueue.findIndex((item) => item.id === sound.id);
     const started = await playSound(sound, {
       queue: playableQueue,
       queueIndex: index >= 0 ? index : 0,
       queueLabel: queueLabel ?? (queue ? undefined : 'All sounds'),
+      startPositionMs,
     });
     if (!started) return;
     if (!hasUnlimitedListening) {
@@ -430,6 +497,20 @@ export function HomeScreen() {
           </View>
         ) : null}
 
+        {!online ? (
+          <View
+            style={[
+              styles.offlineBanner,
+              { backgroundColor: isDark ? '#1C1C1C' : '#EDEAE4', borderColor: colors.border },
+            ]}
+          >
+            <Ionicons name="cloud-offline-outline" size={16} color={GOLD} />
+            <Text style={{ color: colors.text, fontFamily: 'DMSans_500Medium', fontSize: 12, flex: 1 }}>
+              Offline · only downloaded sounds play
+            </Text>
+          </View>
+        ) : null}
+
         {/* Header */}
         <Animated.View style={{ opacity: fade, paddingHorizontal: 16 }}>
           <View style={styles.topRow}>
@@ -444,7 +525,9 @@ export function HomeScreen() {
                 <Text style={[styles.userName, { color: colors.text }]} numberOfLines={1}>
                   {displayName}
                 </Text>
-                {isPremium ? <VerifiedBadge size={16} tone="white" /> : null}
+                {!isCreator && !isAdmin && isPremium ? (
+                  <VerifiedBadge size={16} tone="white" />
+                ) : null}
               </View>
             </View>
             <Pressable
@@ -513,6 +596,7 @@ export function HomeScreen() {
                         item.sound,
                         continueItems.map((c) => c.sound),
                         'Continue listening',
+                        Math.max(0, item.progressSeconds) * 1000,
                       )
                     }
                     style={[
@@ -835,6 +919,18 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   searchPlaceholder: { flex: 1, fontFamily: 'DMSans_400Regular', fontSize: 14 },
+  offlineBanner: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+    marginTop: 4,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   sectionHead: {
     paddingHorizontal: 16,
     marginBottom: 14,

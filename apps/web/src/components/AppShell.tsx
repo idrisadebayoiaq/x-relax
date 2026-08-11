@@ -16,6 +16,7 @@ import {
   Mic,
   Music2,
   Search,
+  Settings,
   Shield,
   Upload,
   User,
@@ -42,6 +43,7 @@ const MAIN_NAV: NavItem[] = [
   { href: '/mix', label: 'Mix Studio', icon: Layers },
   { href: '/sleep', label: 'Sleep Time', icon: Moon },
   { href: '/profile', label: 'Profile', icon: User },
+  { href: '/settings', label: 'Settings', icon: Settings },
 ];
 
 const CREATOR_NAV: NavItem[] = [

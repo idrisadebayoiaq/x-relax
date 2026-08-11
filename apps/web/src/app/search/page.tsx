@@ -14,43 +14,55 @@ export default function SearchPage() {
   const { playSound } = usePlayer();
   const [sounds, setSounds] = useState<Sound[]>([]);
   const [query, setQuery] = useState('');
+  const [debounced, setDebounced] = useState('');
   const [sort, setSort] = useState<SortKey>('newest');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    createClient()
+    const id = window.setTimeout(() => setDebounced(query.trim()), 250);
+    return () => window.clearTimeout(id);
+  }, [query]);
+
+  useEffect(() => {
+    if (!debounced) {
+      setSounds([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    let req = createClient()
       .from('sounds')
       .select('*')
       .eq('status', 'published')
-      .order('created_at', { ascending: false })
-      .then(({ data }) => {
-        setSounds((data as Sound[]) ?? []);
-        setLoading(false);
-      });
-  }, []);
+      .or(`title.ilike.%${debounced}%,description.ilike.%${debounced}%`)
+      .limit(40);
+    if (sort === 'newest') req = req.order('created_at', { ascending: false });
+    if (sort === 'popular') req = req.order('play_count', { ascending: false });
+    if (sort === 'rating') req = req.order('average_rating', { ascending: false });
+    void req.then(({ data }) => {
+      setSounds((data as Sound[]) ?? []);
+      setLoading(false);
+    });
+  }, [debounced, sort]);
 
-  const filtered = useMemo(() => {
+  const suggestions = useMemo(() => {
     const q = query.trim().toLowerCase();
-    let list = sounds;
-    if (q) {
-      list = list.filter(
+    if (!q) return [];
+    return sounds
+      .filter(
         (s) =>
           s.title.toLowerCase().includes(q) ||
           (s.description ?? '').toLowerCase().includes(q),
-      );
-    }
-    if (sort === 'popular') list = [...list].sort((a, b) => b.play_count - a.play_count);
-    if (sort === 'rating')
-      list = [...list].sort((a, b) => (b.average_rating ?? 0) - (a.average_rating ?? 0));
-    return list;
-  }, [sounds, query, sort]);
+      )
+      .slice(0, 8);
+  }, [sounds, query]);
 
   const open = async (sound: Sound) => {
-    const index = filtered.findIndex((s) => s.id === sound.id);
+    const index = sounds.findIndex((s) => s.id === sound.id);
     const started = await playSound(sound, {
-      queue: filtered,
+      queue: sounds,
       queueIndex: index,
-      queueLabel: query.trim() ? 'Search results' : 'All sounds',
+      queueLabel: 'Search results',
     });
     if (started) router.push('/player');
   };
@@ -58,21 +70,54 @@ export default function SearchPage() {
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <h1 className="text-3xl font-serif font-bold">Search</h1>
-      <input className="input" placeholder="Find rain, ocean, focus…" value={query} onChange={(e) => setQuery(e.target.value)} />
-      <div className="flex gap-2 flex-wrap">
-        {(['newest', 'popular', 'rating'] as SortKey[]).map((key) => (
-          <button key={key} type="button" className={`chip ${sort === key ? 'chip-active' : ''}`} onClick={() => setSort(key)}>
-            {key}
-          </button>
-        ))}
-      </div>
-      {loading ? (
-        <p className="text-muted">Loading catalog…</p>
+      <p className="text-muted text-sm">Start typing to find sounds. Nothing loads until you search.</p>
+      <input
+        className="input"
+        placeholder="Find rain, ocean, focus…"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+      />
+      {query.trim() && suggestions.length > 0 ? (
+        <div className="flex flex-wrap gap-2">
+          {suggestions.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              className="chip"
+              onClick={() => setQuery(s.title)}
+            >
+              {s.title}
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {debounced ? (
+        <div className="flex gap-2 flex-wrap">
+          {(['newest', 'popular', 'rating'] as SortKey[]).map((key) => (
+            <button
+              key={key}
+              type="button"
+              className={`chip ${sort === key ? 'chip-active' : ''}`}
+              onClick={() => setSort(key)}
+            >
+              {key}
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {!debounced ? (
+        <p className="text-muted">Type a title or mood to see results.</p>
+      ) : loading ? (
+        <p className="text-muted">Searching…</p>
       ) : (
         <div className="grid gap-3">
-          {filtered.map((sound) => (
-            <SoundCard key={sound.id} sound={sound} onPlay={() => void open(sound)} />
-          ))}
+          {sounds.length === 0 ? (
+            <p className="text-muted">No matches.</p>
+          ) : (
+            sounds.map((sound) => (
+              <SoundCard key={sound.id} sound={sound} onPlay={() => void open(sound)} />
+            ))
+          )}
         </div>
       )}
     </div>

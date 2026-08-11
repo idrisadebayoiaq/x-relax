@@ -1,4 +1,4 @@
-import type { Sound } from '@/types/database';
+import type { Playlist, Sound } from '@/types/database';
 
 const DB_NAME = 'xrelax-offline';
 const DB_VERSION = 1;
@@ -112,3 +112,30 @@ export async function removeOfflineSound(soundId: string) {
 export function isOnline() {
   return typeof navigator !== 'undefined' ? navigator.onLine : true;
 }
+
+const LIBRARY_CACHE_KEY = 'xrelax.offline.library.v1';
+
+export type WebLibraryCache = {
+  playlists: Playlist[];
+  favourites: Sound[];
+  updatedAt: string;
+};
+
+export function cacheWebLibrary(snapshot: WebLibraryCache) {
+  try {
+    localStorage.setItem(LIBRARY_CACHE_KEY, JSON.stringify(snapshot));
+  } catch {
+    /* ignore */
+  }
+}
+
+export function loadCachedWebLibrary(): WebLibraryCache | null {
+  try {
+    const raw = localStorage.getItem(LIBRARY_CACHE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as WebLibraryCache;
+  } catch {
+    return null;
+  }
+}
+

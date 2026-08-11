@@ -32,6 +32,8 @@ export type PlaySoundOptions = {
   queueIndex?: number;
   /** Shown in player, e.g. "Playlist", "Favourites", "Category" */
   queueLabel?: string;
+  startPositionMs?: number;
+  autoPlay?: boolean;
 };
 
 type PlayerContextValue = {
@@ -52,6 +54,7 @@ type PlayerContextValue = {
   playNext: () => Promise<boolean>;
   playPrevious: () => Promise<boolean>;
   stopPlayback: () => Promise<void>;
+  dismissMiniPlayer: () => Promise<void>;
   togglePlay: () => Promise<void>;
   seekBy: (deltaMs: number) => Promise<void>;
   seekTo: (positionMs: number) => Promise<void>;
@@ -63,6 +66,15 @@ type PlayerContextValue = {
 
 const PlayerContext = createContext<PlayerContextValue | undefined>(undefined);
 const PLAY_COUNT_THRESHOLD_SEC = 5;
+const WEB_PLAYBACK_KEY = 'xrelax.playback.session.v1';
+
+type PersistedPlayback = {
+  sound: Sound;
+  queue: Sound[];
+  queueIndex: number;
+  queueLabel: string | null;
+  positionMs: number;
+};
 
 export function PlayerProvider({ children }: { children: ReactNode }) {
   const supabase = useMemo(() => createClient(), []);
@@ -93,11 +105,38 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const lastHistoryWrite = useRef(0);
   const playNextRef = useRef<() => Promise<boolean>>(async () => false);
   const playPreviousRef = useRef<() => Promise<boolean>>(async () => false);
+  const positionMsRef = useRef(0);
+  const restoringRef = useRef(false);
 
   currentRef.current = current;
   queueRef.current = queue;
   queueIndexRef.current = queueIndex;
   queueLabelRef.current = queueLabel;
+  positionMsRef.current = positionMs;
+
+  const persistSession = useCallback(() => {
+    const track = currentRef.current;
+    if (!track?.audio_url || typeof window === 'undefined') {
+      try {
+        localStorage.removeItem(WEB_PLAYBACK_KEY);
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
+    const payload: PersistedPlayback = {
+      sound: track,
+      queue: queueRef.current.length ? queueRef.current : [track],
+      queueIndex: queueIndexRef.current,
+      queueLabel: queueLabelRef.current,
+      positionMs: Math.max(0, positionMsRef.current),
+    };
+    try {
+      localStorage.setItem(WEB_PLAYBACK_KEY, JSON.stringify(payload));
+    } catch {
+      /* ignore */
+    }
+  }, []);
   isLoopingRef.current = isLooping;
   sleepEndsAtRef.current = sleepEndsAt;
 
@@ -181,12 +220,24 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     queueRef.current = [];
     queueIndexRef.current = 0;
     queueLabelRef.current = null;
+    try {
+      localStorage.removeItem(WEB_PLAYBACK_KEY);
+    } catch {
+      /* ignore */
+    }
   }, [unload]);
+
+  const dismissMiniPlayer = useCallback(async () => {
+    await stopPlayback();
+  }, [stopPlayback]);
 
   const bindAudio = useCallback(
     (audio: HTMLAudioElement, sound: Sound) => {
       audio.onplay = () => setIsPlaying(true);
-      audio.onpause = () => setIsPlaying(false);
+      audio.onpause = () => {
+        setIsPlaying(false);
+        persistSession();
+      };
       audio.onloadedmetadata = () => setDurationMs((audio.duration || 0) * 1000);
       audio.ontimeupdate = () => {
         const posSec = audio.currentTime || 0;
@@ -195,7 +246,6 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         if (posSec >= lastPos) {
           listenSecondsRef.current += posSec - lastPos;
         } else {
-          // Seek backward or loop restart — count remaining of prior segment.
           listenSecondsRef.current += Math.max(0, (audio.duration || lastPos) - lastPos) + posSec;
         }
         lastAudioPosRef.current = posSec;
@@ -206,6 +256,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
           lastHistoryWrite.current = now;
           const completed = !!audio.duration && posSec / audio.duration > 0.9;
           void writeHistory(sound, posSec, completed);
+          persistSession();
         }
       };
       audio.onended = () => {
@@ -228,10 +279,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
           void playNextRef.current();
         } else {
           setIsPlaying(false);
+          persistSession();
         }
       };
     },
-    [recordPlayIfEligible, user, writeHistory],
+    [persistSession, recordPlayIfEligible, user, writeHistory],
   );
 
   const loadSound = useCallback(
@@ -241,6 +293,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       nextQueue: Sound[],
       audioUrl?: string,
       nextQueueLabel?: string | null,
+      opts?: { startPositionMs?: number; autoPlay?: boolean },
     ) => {
       const resolvedUrl = audioUrl ?? sound.audio_url;
       if (!resolvedUrl) return false;
@@ -261,21 +314,40 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       const sleepActive =
         isPremium && sleepEndsAtRef.current != null && Date.now() < sleepEndsAtRef.current;
       const shouldLoop = sleepActive || isLooping;
+      const autoPlay = opts?.autoPlay !== false;
+      const startMs = Math.max(0, opts?.startPositionMs ?? 0);
 
       const audio = new Audio(resolvedUrl);
       audio.loop = shouldLoop;
       audio.playbackRate = rate;
+      try {
+        const raw = localStorage.getItem('xrelax.web.settings.v1');
+        const vol = raw ? (JSON.parse(raw) as { volume?: number }).volume : 1;
+        audio.volume = typeof vol === 'number' ? Math.min(1, Math.max(0, vol)) : 1;
+      } catch {
+        audio.volume = 1;
+      }
       bindAudio(audio, sound);
       audioRef.current = audio;
       registerExclusiveAudio(audio);
       claimExclusiveWebPlayback(audio);
       setCurrent(sound);
+      setPositionMs(startMs);
+      positionMsRef.current = startMs;
 
-      try {
-        await audio.play();
-        claimExclusiveWebPlayback(audio);
-      } catch {
-        return false;
+      if (startMs > 0) {
+        audio.currentTime = startMs / 1000;
+      }
+
+      if (autoPlay) {
+        try {
+          await audio.play();
+          claimExclusiveWebPlayback(audio);
+        } catch {
+          return false;
+        }
+      } else {
+        setIsPlaying(false);
       }
 
       if (user) {
@@ -290,9 +362,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         setIsFavourite(false);
       }
 
+      persistSession();
       return true;
     },
-    [bindAudio, isLooping, isPremium, rate, supabase, unload, user],
+    [bindAudio, isLooping, isPremium, persistSession, rate, supabase, unload, user],
   );
 
   const playSound = useCallback(
@@ -335,16 +408,22 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         const label =
           options?.queueLabel ??
           (playableQueue.length > 1 ? queueLabelRef.current : null);
-        return loadSound(sound, index, playableQueue, offlineUrl, label);
+        return loadSound(sound, index, playableQueue, offlineUrl, label, {
+          startPositionMs: options?.startPositionMs,
+          autoPlay: options?.autoPlay,
+        });
       }
 
       if (!sound.audio_url) return false;
 
       const userId = user?.id ?? null;
-      const claim = await claimDailySoundPlay(userId, sound.id, hasUnlimitedListening);
-      if (!claim.allowed) {
-        alert(DAILY_LIMIT_MESSAGE);
-        return false;
+      const skipDailyClaim = options?.autoPlay === false;
+      if (!skipDailyClaim) {
+        const claim = await claimDailySoundPlay(userId, sound.id, hasUnlimitedListening);
+        if (!claim.allowed) {
+          alert(DAILY_LIMIT_MESSAGE);
+          return false;
+        }
       }
 
       const unlockedToday = await getTodayPlayedSoundIds(userId);
@@ -357,20 +436,52 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         hasUnlimitedListening,
       );
       if (!playableQueue.some((item) => item.id === sound.id)) {
-        alert(DAILY_LIMIT_MESSAGE);
-        return false;
+        if (!skipDailyClaim) {
+          alert(DAILY_LIMIT_MESSAGE);
+          return false;
+        }
       }
 
-      const index = Math.max(0, playableQueue.findIndex((item) => item.id === sound.id));
+      const queueForLoad = playableQueue.some((item) => item.id === sound.id)
+        ? playableQueue
+        : rawQueue.length
+          ? rawQueue
+          : [sound];
+
+      const index = Math.max(0, queueForLoad.findIndex((item) => item.id === sound.id));
       const label =
         options?.queueLabel ??
         (options?.queue ? queueLabelRef.current : null) ??
-        (playableQueue.length > 1 ? 'Queue' : null);
+        (queueForLoad.length > 1 ? 'Queue' : null);
 
-      return loadSound(sound, index, playableQueue, undefined, label);
+      return loadSound(sound, index, queueForLoad, undefined, label, {
+        startPositionMs: options?.startPositionMs,
+        autoPlay: options?.autoPlay,
+      });
     },
     [hasUnlimitedListening, loadSound, user?.id, canDownloadOffline],
   );
+
+  useEffect(() => {
+    if (restoringRef.current || typeof window === 'undefined') return;
+    restoringRef.current = true;
+    try {
+      const raw = localStorage.getItem(WEB_PLAYBACK_KEY);
+      if (!raw) return;
+      const session = JSON.parse(raw) as PersistedPlayback;
+      if (!session?.sound?.audio_url) return;
+      void playSound(session.sound, {
+        queue: session.queue?.length ? session.queue : [session.sound],
+        queueIndex: session.queueIndex,
+        queueLabel: session.queueLabel ?? undefined,
+        startPositionMs: session.positionMs,
+        autoPlay: false,
+      });
+    } catch {
+      /* ignore */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const playNext = useCallback(async () => {
     const q = queueRef.current;
@@ -574,6 +685,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       playNext,
       playPrevious,
       stopPlayback,
+      dismissMiniPlayer,
       togglePlay,
       seekBy,
       seekTo,
@@ -598,6 +710,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       playNext,
       playPrevious,
       stopPlayback,
+      dismissMiniPlayer,
       togglePlay,
       seekBy,
       seekTo,

@@ -8,7 +8,7 @@ import { SoundCard } from '@/components/SoundCard';
 import { HorizontalRail } from '@/components/HorizontalRail';
 import { ListeningTipBanner } from '@/components/ListeningTipBanner';
 import { WelcomeBanner } from '@/components/WelcomeBanner';
-import { loadHomeCatalog, type CatalogSection } from '@/lib/catalog';
+import { loadHomeCatalog, type CatalogSection, type ContinueItem } from '@/lib/catalog';
 import { getDailyPlayStatus, FREE_DAILY_SOUND_LIMIT } from '@/lib/daily-listen-limit';
 import { moodPaletteFor } from '@/lib/format';
 import { useAuth } from '@/lib/auth-context';
@@ -22,15 +22,17 @@ export default function HomePage() {
   const [sections, setSections] = useState<CatalogSection[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [catalog, setCatalog] = useState<Sound[]>([]);
+  const [continueItems, setContinueItems] = useState<ContinueItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [dailyPlays, setDailyPlays] = useState<{ remaining: number; limit: number } | null>(null);
 
   useEffect(() => {
     loadHomeCatalog(user?.id)
-      .then(({ all, sections: secs, categories: cats }) => {
+      .then(({ all, sections: secs, categories: cats, continueListening }) => {
         setCatalog(all);
         setSections(secs);
         setCategories(cats);
+        setContinueItems(continueListening ?? []);
       })
       .finally(() => setLoading(false));
   }, [user?.id]);
@@ -45,13 +47,19 @@ export default function HomePage() {
     );
   }, [user?.id, hasUnlimitedListening]);
 
-  const openSound = async (sound: Sound, queue?: Sound[], queueLabel?: string) => {
+  const openSound = async (
+    sound: Sound,
+    queue?: Sound[],
+    queueLabel?: string,
+    startPositionMs?: number,
+  ) => {
     const playableQueue = queue ?? catalog;
     const index = playableQueue.findIndex((s) => s.id === sound.id);
     const started = await playSound(sound, {
       queue: playableQueue,
       queueIndex: index >= 0 ? index : 0,
       queueLabel: queueLabel ?? (queue ? 'Queue' : 'All sounds'),
+      startPositionMs,
     });
     if (started) router.push('/player');
   };
@@ -151,7 +159,18 @@ export default function HomePage() {
                 key={`${section.key}-${sound.id}`}
                 sound={sound}
                 compact
-                onPlay={() => void openSound(sound, section.data, section.title)}
+                onPlay={() => {
+                  const progress =
+                    section.key === 'continue'
+                      ? continueItems.find((c) => c.sound.id === sound.id)?.progressSeconds ?? 0
+                      : 0;
+                  void openSound(
+                    sound,
+                    section.data,
+                    section.title,
+                    progress > 0 ? progress * 1000 : undefined,
+                  );
+                }}
               />
             ))}
           </HorizontalRail>

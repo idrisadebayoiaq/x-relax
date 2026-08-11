@@ -13,11 +13,17 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '../../lib/useAppTheme';
-import { formatDuration, formatPlayCount } from '../../lib/format';
+import { formatDuration, formatElapsed, formatPlayCount } from '../../lib/format';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../auth/AuthProvider';
 import { usePlayer } from '../player/PlayerProvider';
+import { useAppSettings } from '../../lib/AppSettingsProvider';
 import { SoundCard } from '../../ui/Cards';
+import {
+  cacheOfflineDownloads,
+  loadCachedDownloads,
+  loadCachedLibrarySnapshot,
+} from '../../lib/offlineCache';
 import type { Sound } from '../../types/database';
 import type { RootStackParamList } from '../../navigation/types';
 
@@ -26,6 +32,7 @@ export function FavouritesListScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { user } = useAuth();
+  const { online } = useAppSettings();
   const { playSound, current, isPlaying, togglePlay } = usePlayer();
   const [items, setItems] = useState<Sound[]>([]);
   const [loading, setLoading] = useState(true);
@@ -36,14 +43,25 @@ export function FavouritesListScreen() {
       setLoading(false);
       return;
     }
-    const { data } = await supabase
-      .from('favourites')
-      .select('sound:sounds(*)')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false });
-    setItems(((data as any[]) ?? []).map((f) => f.sound).filter(Boolean));
+    if (!online) {
+      const snap = await loadCachedLibrarySnapshot();
+      setItems(snap?.favourites ?? []);
+      setLoading(false);
+      return;
+    }
+    try {
+      const { data } = await supabase
+        .from('favourites')
+        .select('sound:sounds(*)')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+      setItems(((data as any[]) ?? []).map((f) => f.sound).filter(Boolean));
+    } catch {
+      const snap = await loadCachedLibrarySnapshot();
+      setItems(snap?.favourites ?? []);
+    }
     setLoading(false);
-  }, [user]);
+  }, [user, online]);
 
   useFocusEffect(
     useCallback(() => {
@@ -85,6 +103,7 @@ export function FavouritesListScreen() {
               <Text style={[styles.heroTitle, { color: colors.text }]}>Favourite Songs</Text>
               <Text style={[styles.sub, { color: colors.textMuted }]}>
                 {items.length} liked sound{items.length === 1 ? '' : 's'}
+                {!online ? ' · Offline' : ''}
               </Text>
               <Pressable
                 onPress={() => void playAll()}
@@ -174,28 +193,44 @@ export function DownloadsListScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { user, canDownloadOffline } = useAuth();
+  const { online } = useAppSettings();
   const { playSound } = usePlayer();
   const [items, setItems] = useState<(Sound & { local_uri?: string | null })[]>([]);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
-    if (!user || !canDownloadOffline) {
-      setItems([]);
+    if (!user || !canDownloadOffline || !online) {
+      const cached = await loadCachedDownloads();
+      setItems(cached.map((d) => ({ ...d.sound, local_uri: d.localUri, audio_url: d.localUri })));
       setLoading(false);
       return;
     }
-    const { data } = await supabase
-      .from('downloads')
-      .select('local_uri, sound:sounds(*)')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false });
-    setItems(
-      ((data as any[]) ?? [])
+    try {
+      const { data, error } = await supabase
+        .from('downloads')
+        .select('local_uri, sound:sounds(*)')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      const mapped = ((data as any[]) ?? [])
         .map((d) => (d.sound ? { ...d.sound, local_uri: d.local_uri } : null))
-        .filter(Boolean),
-    );
+        .filter(Boolean) as (Sound & { local_uri?: string | null })[];
+      setItems(mapped);
+      await cacheOfflineDownloads(
+        mapped
+          .filter((s) => s.local_uri)
+          .map((s) => ({
+            sound: s,
+            localUri: s.local_uri as string,
+            downloadedAt: new Date().toISOString(),
+          })),
+      );
+    } catch {
+      const cached = await loadCachedDownloads();
+      setItems(cached.map((d) => ({ ...d.sound, local_uri: d.localUri, audio_url: d.localUri })));
+    }
     setLoading(false);
-  }, [user, canDownloadOffline]);
+  }, [user, canDownloadOffline, online]);
 
   useFocusEffect(
     useCallback(() => {
@@ -266,8 +301,15 @@ export function LibraryMixesScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { user, canUseMixes } = useAuth();
+  const { online } = useAppSettings();
   const [items, setItems] = useState<
-    { id: string; title: string; trackCount: number; cover?: string | null }[]
+    {
+      id: string;
+      title: string;
+      trackCount: number;
+      durationSeconds: number;
+      cover?: string | null;
+    }[]
   >([]);
   const [loading, setLoading] = useState(true);
 
@@ -276,26 +318,54 @@ export function LibraryMixesScreen() {
       setLoading(false);
       return;
     }
-    const { data } = await supabase
-      .from('mixes')
-      .select('id, title, tracks:mix_tracks(position, sound:sounds(cover_url))')
-      .eq('user_id', user.id)
-      .order('updated_at', { ascending: false });
-    setItems(
-      ((data as any[]) ?? []).map((m) => {
-        const tracks = [...(m.tracks ?? [])].sort(
-          (a: any, b: any) => (a.position ?? 0) - (b.position ?? 0),
-        );
-        return {
+    if (!online) {
+      const snap = await loadCachedLibrarySnapshot();
+      setItems(
+        (snap?.mixes ?? []).map((m) => ({
           id: m.id,
           title: m.title,
-          trackCount: tracks.length,
-          cover: tracks[0]?.sound?.cover_url ?? null,
-        };
-      }),
-    );
+          trackCount: m.trackCount,
+          durationSeconds: m.durationSeconds,
+          cover: m.cover,
+        })),
+      );
+      setLoading(false);
+      return;
+    }
+    try {
+      const { data } = await supabase
+        .from('mixes')
+        .select('id, title, duration_seconds, tracks:mix_tracks(position, sound:sounds(cover_url))')
+        .eq('user_id', user.id)
+        .order('updated_at', { ascending: false });
+      setItems(
+        ((data as any[]) ?? []).map((m) => {
+          const tracks = [...(m.tracks ?? [])].sort(
+            (a: any, b: any) => (a.position ?? 0) - (b.position ?? 0),
+          );
+          return {
+            id: m.id,
+            title: m.title,
+            trackCount: tracks.length,
+            durationSeconds: Number(m.duration_seconds ?? 0),
+            cover: tracks[0]?.sound?.cover_url ?? null,
+          };
+        }),
+      );
+    } catch {
+      const snap = await loadCachedLibrarySnapshot();
+      setItems(
+        (snap?.mixes ?? []).map((m) => ({
+          id: m.id,
+          title: m.title,
+          trackCount: m.trackCount,
+          durationSeconds: m.durationSeconds,
+          cover: m.cover,
+        })),
+      );
+    }
     setLoading(false);
-  }, [user]);
+  }, [user, online]);
 
   useFocusEffect(
     useCallback(() => {
@@ -349,7 +419,10 @@ export function LibraryMixesScreen() {
               <View style={{ flex: 1 }}>
                 <Text style={[styles.mixTitle, { color: colors.text }]}>{item.title}</Text>
                 <Text style={{ color: colors.textMuted, fontFamily: 'DMSans_400Regular', fontSize: 12 }}>
-                  {item.trackCount} layered sound{item.trackCount === 1 ? '' : 's'}
+                  {item.trackCount} layer{item.trackCount === 1 ? '' : 's'}
+                  {item.durationSeconds > 0
+                    ? ` · ${formatElapsed(item.durationSeconds)}`
+                    : ''}
                 </Text>
               </View>
               <Ionicons name="play-circle-outline" size={26} color={colors.text} />

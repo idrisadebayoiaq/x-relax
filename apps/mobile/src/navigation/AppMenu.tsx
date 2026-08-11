@@ -6,6 +6,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -13,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '../lib/useAppTheme';
 import { useAuth } from '../features/auth/AuthProvider';
 import { VerifiedBadge } from '../ui/VerifiedBadge';
+import { ShareAppSheet } from './ShareAppSheet';
 import type { RootStackParamList } from './types';
 
 export function AppMenu({ visible, onClose }: { visible: boolean; onClose: () => void }) {
@@ -20,6 +22,7 @@ export function AppMenu({ visible, onClose }: { visible: boolean; onClose: () =>
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { profile, isPremium, isCreator, isAdmin, signOut } = useAuth();
+  const [shareOpen, setShareOpen] = useState(false);
 
   const go = (route: keyof RootStackParamList, params?: object) => {
     onClose();
@@ -28,6 +31,7 @@ export function AppMenu({ visible, onClose }: { visible: boolean; onClose: () =>
   };
 
   const name = profile?.display_name?.trim() || 'Listener';
+  const showWhiteBadge = !isCreator && !isAdmin && isPremium;
 
   const items: {
     key: string;
@@ -74,6 +78,21 @@ export function AppMenu({ visible, onClose }: { visible: boolean; onClose: () =>
       hidden: !isAdmin,
     },
     {
+      key: 'settings',
+      label: 'Settings',
+      icon: 'settings-outline',
+      onPress: () => go('Settings'),
+    },
+    {
+      key: 'share',
+      label: 'Share app',
+      icon: 'share-social-outline',
+      onPress: () => {
+        onClose();
+        setShareOpen(true);
+      },
+    },
+    {
       key: 'notifications',
       label: 'Notifications',
       icon: 'notifications-outline',
@@ -94,63 +113,66 @@ export function AppMenu({ visible, onClose }: { visible: boolean; onClose: () =>
   ];
 
   return (
-    <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
-      <View style={styles.backdrop}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
-        <View
-          style={[
-            styles.sheet,
-            {
-              backgroundColor: isDark ? '#0C0C0C' : colors.background,
-              borderColor: colors.border,
-              paddingTop: insets.top + 12,
-              paddingBottom: insets.bottom + 16,
-            },
-          ]}
-        >
-          <View style={styles.sheetHead}>
-            <View>
-              <Text style={[styles.brand, { color: colors.textMuted }]}>X-Relax</Text>
-              <View style={styles.nameRow}>
-                <Text style={[styles.name, { color: colors.text }]} numberOfLines={1}>
-                  {name}
-                </Text>
-                {isPremium ? <VerifiedBadge size={16} tone="white" /> : null}
+    <>
+      <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
+        <View style={styles.backdrop}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+          <View
+            style={[
+              styles.sheet,
+              {
+                backgroundColor: isDark ? '#0C0C0C' : colors.background,
+                borderColor: colors.border,
+                paddingTop: insets.top + 12,
+                paddingBottom: insets.bottom + 16,
+              },
+            ]}
+          >
+            <View style={styles.sheetHead}>
+              <View>
+                <Text style={[styles.brand, { color: colors.textMuted }]}>X-Relax</Text>
+                <View style={styles.nameRow}>
+                  <Text style={[styles.name, { color: colors.text }]} numberOfLines={1}>
+                    {name}
+                  </Text>
+                  {showWhiteBadge ? <VerifiedBadge size={16} tone="white" /> : null}
+                </View>
               </View>
+              <Pressable onPress={onClose} hitSlop={12} style={styles.iconHit}>
+                <Ionicons name="close" size={22} color={colors.text} />
+              </Pressable>
             </View>
-            <Pressable onPress={onClose} hitSlop={12} style={styles.iconHit}>
-              <Ionicons name="close" size={22} color={colors.text} />
-            </Pressable>
-          </View>
 
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.list}>
-            {items
-              .filter((item) => !item.hidden)
-              .map((item) => (
-                <Pressable
-                  key={item.key}
-                  onPress={item.onPress}
-                  style={[styles.row, { borderColor: colors.border }]}
-                >
-                  <Ionicons name={item.icon} size={20} color={colors.text} />
-                  <Text style={[styles.rowLabel, { color: colors.text }]}>{item.label}</Text>
-                  <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
-                </Pressable>
-              ))}
-            <Pressable
-              onPress={async () => {
-                onClose();
-                await signOut();
-              }}
-              style={[styles.row, styles.signOut, { borderColor: colors.border }]}
-            >
-              <Ionicons name="log-out-outline" size={20} color="#EF4444" />
-              <Text style={[styles.rowLabel, { color: '#EF4444' }]}>Sign out</Text>
-            </Pressable>
-          </ScrollView>
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.list}>
+              {items
+                .filter((item) => !item.hidden)
+                .map((item) => (
+                  <Pressable
+                    key={item.key}
+                    onPress={item.onPress}
+                    style={[styles.row, { borderColor: colors.border }]}
+                  >
+                    <Ionicons name={item.icon} size={20} color={colors.text} />
+                    <Text style={[styles.rowLabel, { color: colors.text }]}>{item.label}</Text>
+                    <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+                  </Pressable>
+                ))}
+              <Pressable
+                onPress={async () => {
+                  onClose();
+                  await signOut();
+                }}
+                style={[styles.row, styles.signOut, { borderColor: colors.border }]}
+              >
+                <Ionicons name="log-out-outline" size={20} color="#EF4444" />
+                <Text style={[styles.rowLabel, { color: '#EF4444' }]}>Sign out</Text>
+              </Pressable>
+            </ScrollView>
+          </View>
         </View>
-      </View>
-    </Modal>
+      </Modal>
+      <ShareAppSheet visible={shareOpen} onClose={() => setShareOpen(false)} />
+    </>
   );
 }
 

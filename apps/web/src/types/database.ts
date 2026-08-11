@@ -17,6 +17,9 @@ export type Profile = {
   id: string;
   display_name: string | null;
   avatar_url: string | null;
+  banner_url?: string | null;
+  bio?: string | null;
+  city?: string | null;
   country_code: string | null;
   role: UserRole;
   premium_status: PremiumStatus;
@@ -118,6 +121,8 @@ export type Mix = {
   id: string;
   user_id: string;
   title: string;
+  duration_seconds?: number | null;
+  sound_id?: string | null;
   created_at: string;
   updated_at: string;
 };

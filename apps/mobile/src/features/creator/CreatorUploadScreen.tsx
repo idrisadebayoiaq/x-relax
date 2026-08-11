@@ -158,7 +158,7 @@ export function CreatorUploadScreen() {
         audio_path: audioPath,
         audio_url: signed?.signedUrl ?? null,
         duration_seconds: 0,
-        status: 'pending',
+        status: 'published',
       })
       .select('*')
       .single();
@@ -174,14 +174,8 @@ export function CreatorUploadScreen() {
       category_id: categoryId,
     });
 
-    await supabase.rpc('notify_admins', {
-      p_title: 'New sound upload',
-      p_body: `${title.trim()} is waiting for review`,
-      p_data: { sound_id: sound.id },
-    });
-
     setBusy(false);
-    Alert.alert('Submitted', 'Your sound is pending admin review.');
+    Alert.alert('Published', 'Your sound is live and available in the catalog.');
     navigation.goBack();
   };
 
@@ -197,7 +191,7 @@ export function CreatorUploadScreen() {
   return (
     <ScreenScaffold
       title="Upload sound"
-      subtitle="Submitted tracks wait in the moderation queue"
+      subtitle="Published tracks go live in the catalog right away"
       onBack={() => navigation.goBack()}
     >
       <TextInput
@@ -291,7 +285,7 @@ export function CreatorUploadScreen() {
 
       <View style={{ height: 16 }} />
       <PrimaryButton
-        label="Submit for review"
+        label="Publish sound"
         onPress={submit}
         loading={busy}
         disabled={busy}

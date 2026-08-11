@@ -3,7 +3,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 export type VerifiedBadgeTone = 'white' | 'blue';
 
-/** White = Premium listener. Blue = verified creator or verified admin. */
+/** White = verified Premium listener only. Blue = verified creator or verified admin. */
 export function VerifiedBadge({
   size = 16,
   tone = 'white',

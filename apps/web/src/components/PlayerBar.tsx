@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Lock, Pause, Play, Repeat, SkipBack, SkipForward } from 'lucide-react';
+import { Lock, Pause, Play, Repeat, SkipBack, SkipForward, X } from 'lucide-react';
 import { CoverArt } from '@/components/CoverArt';
 import { formatMs } from '@/lib/format';
 import { useAuth } from '@/lib/auth-context';
@@ -21,6 +21,7 @@ export function PlayerBar() {
     toggleLoop,
     hasNext,
     hasPrevious,
+    dismissMiniPlayer,
   } = usePlayer();
 
   if (!current) return null;
@@ -85,6 +86,14 @@ export function PlayerBar() {
             aria-label="Loop"
           >
             {isPremium ? <Repeat size={16} /> : <Lock size={16} />}
+          </button>
+          <button
+            type="button"
+            className="btn btn-outline px-3 py-2"
+            onClick={() => void dismissMiniPlayer()}
+            aria-label="Close player"
+          >
+            <X size={16} />
           </button>
         </div>
         <div className="hidden md:block w-40 h-1 rounded bg-border overflow-hidden">

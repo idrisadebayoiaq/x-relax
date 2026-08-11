@@ -1,21 +1,18 @@
-import { useMemo } from 'react';
+import { useContext } from 'react';
 import { useColorScheme } from 'react-native';
-import {
-  resolveColors,
-  type ThemeColors,
-  type ThemePreference,
-} from './theme';
+import { resolveColors, type ThemeColors, type ThemePreference } from './theme';
+import { ThemeContext } from './ThemeProvider';
 
-/** Phase 0: system-driven theme. User override comes in Phase 1. */
-export function useAppTheme(preference: ThemePreference = 'system'): {
+/** Uses ThemeProvider preference when available; otherwise system scheme. */
+export function useAppTheme(_preference?: ThemePreference): {
   colors: ThemeColors;
   isDark: boolean;
 } {
+  const ctx = useContext(ThemeContext);
   const systemScheme = useColorScheme();
-  const colors = useMemo(
-    () => resolveColors(preference, systemScheme),
-    [preference, systemScheme],
-  );
-  const isDark = colors.background === '#000000';
-  return { colors, isDark };
+  if (ctx) return { colors: ctx.colors, isDark: ctx.isDark };
+  const colors = resolveColors(_preference ?? 'system', systemScheme);
+  return { colors, isDark: colors.background === '#000000' };
 }
+
+export type { ThemeColors, ThemePreference };

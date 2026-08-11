@@ -10,6 +10,15 @@ import { useAuth } from '@/lib/auth-context';
 import { usePlayer } from '@/lib/player-context';
 import type { Playlist, Sound } from '@/types/database';
 
+const MIX_SOUND_PREFIX = '__xrelax_mix__:';
+
+function mixIdFromSound(sound: Sound): string | null {
+  const desc = sound.description ?? '';
+  if (!desc.startsWith(MIX_SOUND_PREFIX)) return null;
+  const id = desc.slice(MIX_SOUND_PREFIX.length).trim();
+  return id || null;
+}
+
 export default function PlaylistDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -65,14 +74,27 @@ export default function PlaylistDetailPage() {
     else setPlaylist({ ...playlist, visibility: next });
   };
 
-  const playAll = async () => {
-    if (!sounds.length) return;
-    const started = await playSound(sounds[0], {
+  const openOrPlay = async (sound: Sound, index: number) => {
+    const mixId = mixIdFromSound(sound);
+    if (mixId) {
+      router.push(`/mix?mixId=${encodeURIComponent(mixId)}`);
+      return;
+    }
+    if (current?.id === sound.id) {
+      await togglePlay();
+      return;
+    }
+    const started = await playSound(sound, {
       queue: sounds,
-      queueIndex: 0,
+      queueIndex: index,
       queueLabel: playlist?.title ?? 'Playlist',
     });
     if (started) router.push('/player');
+  };
+
+  const playAll = async () => {
+    if (!sounds.length) return;
+    await openOrPlay(sounds[0], 0);
   };
 
   const cover = playlist?.cover_url ?? sounds[0]?.cover_url;
@@ -122,25 +144,13 @@ export default function PlaylistDetailPage() {
       <ul className="divide-y divide-border">
         {sounds.map((sound, index) => {
           const active = current?.id === sound.id;
+          const isMix = !!mixIdFromSound(sound);
           return (
             <li key={sound.id}>
               <button
                 type="button"
                 className="w-full flex items-center gap-3.5 py-3 text-left"
-                onClick={() => {
-                  void (async () => {
-                    if (active) {
-                      await togglePlay();
-                      return;
-                    }
-                    const started = await playSound(sound, {
-                      queue: sounds,
-                      queueIndex: index,
-                      queueLabel: playlist?.title ?? 'Playlist',
-                    });
-                    if (started) router.push('/player');
-                  })();
-                }}
+                onClick={() => void openOrPlay(sound, index)}
               >
                 <CoverArt title={sound.title} uri={sound.cover_url} size={48} rounded={4} />
                 <span className="min-w-0 flex-1">
@@ -149,6 +159,7 @@ export default function PlaylistDetailPage() {
                   </span>
                   <span className="block text-sm text-muted">
                     {formatDuration(sound.duration_seconds)}
+                    {isMix ? ' · Mix' : ''}
                   </span>
                 </span>
                 {active && isPlaying ? <span className="text-muted pr-1">❚❚</span> : null}

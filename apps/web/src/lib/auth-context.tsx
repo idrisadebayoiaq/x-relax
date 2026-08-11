@@ -41,6 +41,9 @@ type AuthContextValue = {
   updateProfile: (input: {
     displayName?: string;
     avatarFile?: File | null;
+    bannerFile?: File | null;
+    bio?: string | null;
+    city?: string | null;
     countryCode?: string | null;
   }) => Promise<{ error: string | null }>;
 };
@@ -180,6 +183,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (input: {
       displayName?: string;
       avatarFile?: File | null;
+      bannerFile?: File | null;
+      bio?: string | null;
+      city?: string | null;
       countryCode?: string | null;
     }) => {
       if (!session?.user) return { error: 'Not signed in' };
@@ -201,9 +207,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         avatarUrl = `${pub.publicUrl}?v=${Date.now()}`;
       }
 
+      let bannerUrl: string | undefined;
+      if (input.bannerFile) {
+        const path = `${session.user.id}/banners/${Date.now()}.jpg`;
+        const { error: uploadError } = await supabase.storage
+          .from('covers')
+          .upload(path, input.bannerFile, {
+            upsert: true,
+            contentType: input.bannerFile.type || 'image/jpeg',
+            cacheControl: '3600',
+          });
+        if (uploadError) return { error: uploadError.message };
+        const { data: pub } = supabase.storage.from('covers').getPublicUrl(path);
+        bannerUrl = `${pub.publicUrl}?v=${Date.now()}`;
+      }
+
       const patch: Record<string, string | null> = { updated_at: new Date().toISOString() };
       if (input.displayName != null) patch.display_name = input.displayName.trim();
       if (avatarUrl) patch.avatar_url = avatarUrl;
+      if (bannerUrl) patch.banner_url = bannerUrl;
+      if (input.bio !== undefined) patch.bio = input.bio?.trim() || null;
+      if (input.city !== undefined) patch.city = input.city?.trim() || null;
       if (input.countryCode !== undefined) {
         patch.country_code = input.countryCode
           ? input.countryCode.trim().toUpperCase()
@@ -211,6 +235,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       const { error } = await supabase.from('profiles').update(patch).eq('id', session.user.id);
+      if (!error && (bannerUrl || input.bio !== undefined)) {
+        const creatorPatch: Record<string, string | null> = {
+          updated_at: new Date().toISOString(),
+        };
+        if (bannerUrl) creatorPatch.banner_url = bannerUrl;
+        if (input.bio !== undefined) creatorPatch.bio = input.bio?.trim() || null;
+        await supabase
+          .from('creator_profiles')
+          .update(creatorPatch)
+          .eq('user_id', session.user.id);
+      }
       if (!error) await refreshProfile();
       return { error: error?.message ?? null };
     },

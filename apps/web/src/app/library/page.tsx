@@ -41,11 +41,14 @@ export default function LibraryPage() {
     setLoading(true);
     const supabase = createClient();
 
-    if (!online && canDownloadOffline) {
-      const { listOfflineSounds } = await import('@/lib/offline-storage');
+    if (!online) {
+      const { listOfflineSounds, loadCachedWebLibrary } = await import('@/lib/offline-storage');
+      const cached = loadCachedWebLibrary();
       setDownloads(await listOfflineSounds());
-      setPlaylists([]);
-      setFavourites([]);
+      setPlaylists(cached?.playlists ?? []);
+      setFavourites(cached?.favourites ?? []);
+      setFavCount(cached?.favourites.length ?? 0);
+      setDiscover([]);
       setLoading(false);
       return;
     }
@@ -91,11 +94,16 @@ export default function LibraryPage() {
       .filter(Boolean) as Sound[];
     setFavourites(favSounds);
     setFavCount(favSounds.length);
-    setDownloads(
-      ((dls ?? []) as unknown as { sound: Sound | Sound[] }[])
-        .map((d) => (Array.isArray(d.sound) ? d.sound[0] : d.sound))
-        .filter(Boolean) as Sound[],
-    );
+    const nextDownloads = ((dls ?? []) as unknown as { sound: Sound | Sound[] }[])
+      .map((d) => (Array.isArray(d.sound) ? d.sound[0] : d.sound))
+      .filter(Boolean) as Sound[];
+    setDownloads(nextDownloads);
+    const { cacheWebLibrary } = await import('@/lib/offline-storage');
+    cacheWebLibrary({
+      playlists: ((pls as any[]) ?? []).map(normalize),
+      favourites: favSounds,
+      updatedAt: new Date().toISOString(),
+    });
     setLoading(false);
   }, [user, online, canDownloadOffline]);
 

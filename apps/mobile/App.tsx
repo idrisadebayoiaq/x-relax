@@ -16,6 +16,8 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider } from './src/features/auth/AuthProvider';
 import { PlayerProvider } from './src/features/player/PlayerProvider';
 import { MixProvider } from './src/features/mix/MixProvider';
+import { ThemeProvider } from './src/lib/ThemeProvider';
+import { AppSettingsProvider } from './src/lib/AppSettingsProvider';
 import { RootNavigator } from './src/navigation/RootNavigator';
 import { SleepTimeScheduler } from './src/features/premium/SleepTimeScheduler';
 import { useAuth } from './src/features/auth/AuthProvider';
@@ -105,11 +107,15 @@ export default function App() {
       <ErrorBoundary>
         <ConfigGate>
           <AuthProvider>
-            <PlayerProvider>
-              <MixProvider>
-                <AppShell />
-              </MixProvider>
-            </PlayerProvider>
+            <ThemeProvider>
+              <AppSettingsProvider>
+                <PlayerProvider>
+                  <MixProvider>
+                    <AppShell />
+                  </MixProvider>
+                </PlayerProvider>
+              </AppSettingsProvider>
+            </ThemeProvider>
           </AuthProvider>
         </ConfigGate>
       </ErrorBoundary>

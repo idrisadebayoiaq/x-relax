@@ -5,6 +5,18 @@ export function formatDuration(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
+/** Always shows mm:ss (including 0:00) for live timers. */
+export function formatElapsed(seconds: number): string {
+  const total = Math.max(0, Math.floor(Number.isFinite(seconds) ? seconds : 0));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  if (h > 0) {
+    return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  }
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
 export function formatPlayCount(count: number | null | undefined): string {
   const n = Number(count ?? 0);
   if (!Number.isFinite(n) || n <= 0) return '0 plays';

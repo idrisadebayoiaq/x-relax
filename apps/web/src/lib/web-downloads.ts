@@ -13,6 +13,30 @@ export async function downloadSoundForWeb(
   userId: string,
   sound: Sound,
 ): Promise<{ ok: boolean; message: string }> {
+  try {
+    const raw = localStorage.getItem('xrelax.web.settings.v1');
+    const mode = raw
+      ? ((JSON.parse(raw) as { downloadNetwork?: string }).downloadNetwork ?? 'cellular')
+      : 'cellular';
+    // Browser cannot always distinguish Wi‑Fi vs cellular; respect offline and a soft hint.
+    if (!navigator.onLine) {
+      return { ok: false, message: 'No internet connection.' };
+    }
+    if (mode === 'wifi') {
+      // Network Information API when available
+      const conn = (navigator as Navigator & { connection?: { type?: string; effectiveType?: string } })
+        .connection;
+      if (conn?.type === 'cellular' || conn?.effectiveType === '2g' || conn?.effectiveType === '3g') {
+        return {
+          ok: false,
+          message: 'Downloads are set to Wi‑Fi only. Connect to Wi‑Fi or change Download settings.',
+        };
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+
   const gate = await assertCanDownload(userId);
   if (gate) return { ok: false, message: gate };
 

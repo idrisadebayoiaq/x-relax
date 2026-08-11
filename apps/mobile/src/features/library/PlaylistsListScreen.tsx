@@ -21,7 +21,9 @@ import { useAppTheme } from '../../lib/useAppTheme';
 import { moodPaletteFor } from '../../lib/format';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../auth/AuthProvider';
+import { useAppSettings } from '../../lib/AppSettingsProvider';
 import { loadSuggestedPlaylists } from '../../lib/playlistSuggestions';
+import { loadCachedLibrarySnapshot } from '../../lib/offlineCache';
 import type { Playlist } from '../../types/database';
 import type { RootStackParamList } from '../../navigation/types';
 
@@ -36,6 +38,7 @@ export function PlaylistsListScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { user } = useAuth();
+  const { online } = useAppSettings();
 
   const [mine, setMine] = useState<Playlist[]>([]);
   const [discover, setDiscover] = useState<Playlist[]>([]);
@@ -54,35 +57,50 @@ export function PlaylistsListScreen() {
       setLoading(false);
       return;
     }
-    const [{ data: own }, suggested, { count }] = await Promise.all([
-      supabase
-        .from('playlists')
-        .select('*, items:playlist_items(position, sound:sounds(cover_url))')
-        .eq('user_id', user.id)
-        .order('updated_at', { ascending: false }),
-      loadSuggestedPlaylists({ userId: user.id, limit: 40 }),
-      supabase
-        .from('favourites')
-        .select('id', { count: 'exact', head: true })
-        .eq('user_id', user.id),
-    ]);
+    if (!online) {
+      const snap = await loadCachedLibrarySnapshot();
+      setMine(snap?.playlists ?? []);
+      setDiscover([]);
+      setFavCount(snap?.favourites.length ?? 0);
+      setLoading(false);
+      return;
+    }
+    try {
+      const [{ data: own }, suggested, { count }] = await Promise.all([
+        supabase
+          .from('playlists')
+          .select('*, items:playlist_items(position, sound:sounds(cover_url))')
+          .eq('user_id', user.id)
+          .order('updated_at', { ascending: false }),
+        loadSuggestedPlaylists({ userId: user.id, limit: 40 }),
+        supabase
+          .from('favourites')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', user.id),
+      ]);
 
-    setMine(
-      ((own as any[]) ?? []).map((p) => {
-        const items = [...(p.items ?? [])].sort(
-          (a: any, b: any) => (a.position ?? 0) - (b.position ?? 0),
-        );
-        return {
-          ...p,
-          cover_url: p.cover_url ?? items[0]?.sound?.cover_url ?? null,
-          item_count: items.length,
-        } as Playlist;
-      }),
-    );
-    setDiscover(suggested);
-    setFavCount(Number(count ?? 0));
+      setMine(
+        ((own as any[]) ?? []).map((p) => {
+          const items = [...(p.items ?? [])].sort(
+            (a: any, b: any) => (a.position ?? 0) - (b.position ?? 0),
+          );
+          return {
+            ...p,
+            cover_url: p.cover_url ?? items[0]?.sound?.cover_url ?? null,
+            item_count: items.length,
+          } as Playlist;
+        }),
+      );
+      setDiscover(suggested);
+      setFavCount(Number(count ?? 0));
+    } catch {
+      const snap = await loadCachedLibrarySnapshot();
+      setMine(snap?.playlists ?? []);
+      setDiscover([]);
+      setFavCount(snap?.favourites.length ?? 0);
+    }
     setLoading(false);
-  }, [user]);
+  }, [user, online]);
 
   useFocusEffect(
     useCallback(() => {
@@ -91,6 +109,10 @@ export function PlaylistsListScreen() {
   );
 
   const createPlaylist = async () => {
+    if (!online) {
+      Alert.alert('Offline', 'Connect to the internet to create a playlist.');
+      return;
+    }
     if (!user || !title.trim()) {
       Alert.alert('Name required', 'Give your playlist a name.');
       return;

@@ -21,6 +21,12 @@ import { useAppTheme } from '../../lib/useAppTheme';
 import { moodPaletteFor } from '../../lib/format';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../auth/AuthProvider';
+import { useAppSettings } from '../../lib/AppSettingsProvider';
+import {
+  cacheLibrarySnapshot,
+  loadCachedDownloads,
+  loadCachedLibrarySnapshot,
+} from '../../lib/offlineCache';
 import type { Playlist, Sound } from '../../types/database';
 import type { MainTabParamList, RootStackParamList } from '../../navigation/types';
 import type { SavedMix } from '../mix/MixProvider';
@@ -51,6 +57,7 @@ export function LibraryScreen() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const { user, canDownloadOffline } = useAuth();
+  const { online } = useAppSettings();
   const navigation = useNavigation<LibraryNavigation>();
 
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
@@ -64,62 +71,159 @@ export function LibraryScreen() {
   const pad = 20;
   const cardW = (width - pad * 2 - gap) / 2;
 
+  const applySnapshot = useCallback(
+    (snap: {
+      playlists: Playlist[];
+      favourites: Sound[];
+      mixes: SavedMix[];
+      downloadCount: number;
+    }) => {
+      setPlaylists(snap.playlists);
+      setFavourites(snap.favourites);
+      setMixes(snap.mixes);
+      setDownloadCount(snap.downloadCount);
+    },
+    [],
+  );
+
   const load = useCallback(async () => {
     if (!user) {
       setLoading(false);
       setRefreshing(false);
       return;
     }
-    const [{ data: pls }, { data: favs }, { data: mixRows }, dlsResult] = await Promise.all([
-      supabase
-        .from('playlists')
-        .select('*, items:playlist_items(position, sound:sounds(cover_url))')
-        .eq('user_id', user.id)
-        .order('updated_at', { ascending: false }),
-      supabase
-        .from('favourites')
-        .select('sound:sounds(*)')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(20),
-      supabase
-        .from('mixes')
-        .select('*, tracks:mix_tracks(volume, position, sound:sounds(*))')
-        .eq('user_id', user.id)
-        .order('updated_at', { ascending: false }),
-      canDownloadOffline
-        ? supabase
-            .from('downloads')
-            .select('id', { count: 'exact', head: true })
-            .eq('user_id', user.id)
-        : Promise.resolve({ count: 0 }),
-    ]);
 
-    const normalizedPlaylists = ((pls as any[]) ?? []).map((p) => {
-      const items = [...(p.items ?? [])].sort(
-        (a: any, b: any) => (a.position ?? 0) - (b.position ?? 0),
-      );
-      return {
-        ...p,
-        cover_url: p.cover_url ?? items[0]?.sound?.cover_url ?? null,
-        item_count: items.length,
-      } as Playlist;
-    });
+    if (!online) {
+      const [snap, downloads] = await Promise.all([
+        loadCachedLibrarySnapshot(),
+        loadCachedDownloads(),
+      ]);
+      if (snap) {
+        applySnapshot({
+          playlists: snap.playlists,
+          favourites: snap.favourites,
+          mixes: snap.mixes.map(
+            (m) =>
+              ({
+                id: m.id,
+                title: m.title,
+                user_id: user.id,
+                duration_seconds: m.durationSeconds,
+                tracks: m.tracks ?? [],
+                created_at: '',
+                updated_at: '',
+              }) as SavedMix,
+          ),
+          downloadCount: snap.downloadCount || downloads.length,
+        });
+      } else {
+        applySnapshot({
+          playlists: [],
+          favourites: [],
+          mixes: [],
+          downloadCount: downloads.length,
+        });
+      }
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
 
-    setPlaylists(normalizedPlaylists);
-    setFavourites(((favs as any[]) ?? []).map((f) => f.sound).filter(Boolean));
-    setMixes(
-      ((mixRows as SavedMix[]) ?? [])
+    try {
+      const [{ data: pls }, { data: favs }, { data: mixRows }, dlsResult] = await Promise.all([
+        supabase
+          .from('playlists')
+          .select('*, items:playlist_items(position, sound:sounds(cover_url))')
+          .eq('user_id', user.id)
+          .order('updated_at', { ascending: false }),
+        supabase
+          .from('favourites')
+          .select('sound:sounds(*)')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(20),
+        supabase
+          .from('mixes')
+          .select('*, tracks:mix_tracks(volume, position, sound:sounds(*))')
+          .eq('user_id', user.id)
+          .order('updated_at', { ascending: false }),
+        canDownloadOffline
+          ? supabase
+              .from('downloads')
+              .select('id', { count: 'exact', head: true })
+              .eq('user_id', user.id)
+          : Promise.resolve({ count: 0 }),
+      ]);
+
+      const normalizedPlaylists = ((pls as any[]) ?? []).map((p) => {
+        const items = [...(p.items ?? [])].sort(
+          (a: any, b: any) => (a.position ?? 0) - (b.position ?? 0),
+        );
+        return {
+          ...p,
+          cover_url: p.cover_url ?? items[0]?.sound?.cover_url ?? null,
+          item_count: items.length,
+        } as Playlist;
+      });
+
+      const nextFavourites = ((favs as any[]) ?? []).map((f) => f.sound).filter(Boolean) as Sound[];
+      const nextMixes = ((mixRows as SavedMix[]) ?? [])
         .map((mix) => ({
           ...mix,
           tracks: [...(mix.tracks ?? [])].sort((a, b) => a.position - b.position),
         }))
-        .filter((mix) => mix.tracks.length > 0),
-    );
-    setDownloadCount(Number((dlsResult as { count?: number }).count ?? 0));
+        .filter((mix) => mix.tracks.length > 0);
+      const nextDownloadCount = Number((dlsResult as { count?: number }).count ?? 0);
+
+      applySnapshot({
+        playlists: normalizedPlaylists,
+        favourites: nextFavourites,
+        mixes: nextMixes,
+        downloadCount: nextDownloadCount,
+      });
+
+      await cacheLibrarySnapshot({
+        playlists: normalizedPlaylists,
+        favourites: nextFavourites,
+        mixes: nextMixes.map((m) => ({
+          id: m.id,
+          title: m.title,
+          durationSeconds: Number(m.duration_seconds ?? 0),
+          trackCount: m.tracks.length,
+          cover: m.tracks[0]?.sound?.cover_url ?? null,
+          tracks: m.tracks,
+        })),
+        downloadCount: nextDownloadCount,
+        updatedAt: new Date().toISOString(),
+      });
+    } catch {
+      const [snap, downloads] = await Promise.all([
+        loadCachedLibrarySnapshot(),
+        loadCachedDownloads(),
+      ]);
+      if (snap) {
+        applySnapshot({
+          playlists: snap.playlists,
+          favourites: snap.favourites,
+          mixes: snap.mixes.map(
+            (m) =>
+              ({
+                id: m.id,
+                title: m.title,
+                user_id: user.id,
+                duration_seconds: m.durationSeconds,
+                tracks: m.tracks ?? [],
+                created_at: '',
+                updated_at: '',
+              }) as SavedMix,
+          ),
+          downloadCount: snap.downloadCount || downloads.length,
+        });
+      }
+    }
     setLoading(false);
     setRefreshing(false);
-  }, [user, canDownloadOffline]);
+  }, [user, canDownloadOffline, online, applySnapshot]);
 
   useFocusEffect(
     useCallback(() => {
@@ -251,6 +355,20 @@ export function LibraryScreen() {
             </Pressable>
           </View>
         </View>
+
+        {!online ? (
+          <View
+            style={[
+              styles.offlineBanner,
+              { borderColor: colors.border, backgroundColor: colors.surface },
+            ]}
+          >
+            <Ionicons name="cloud-offline-outline" size={16} color={colors.text} />
+            <Text style={{ color: colors.textMuted, fontFamily: 'DMSans_400Regular', fontSize: 13, flex: 1 }}>
+              Offline · browse Library · play downloaded sounds only
+            </Text>
+          </View>
+        ) : null}
 
         {loading ? (
           <ActivityIndicator color={colors.icon} style={{ marginTop: 40 }} />
@@ -417,5 +535,16 @@ const styles = StyleSheet.create({
     fontFamily: 'DMSans_400Regular',
     fontSize: 14,
     lineHeight: 20,
+  },
+  offlineBanner: {
+    marginHorizontal: 20,
+    marginBottom: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
 });

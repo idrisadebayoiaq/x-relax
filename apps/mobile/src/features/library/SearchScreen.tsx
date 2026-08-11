@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -31,9 +31,10 @@ export function SearchScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<MainTabParamList, 'Search'>>();
   const [query, setQuery] = useState(route.params?.query ?? '');
+  const [debounced, setDebounced] = useState(query.trim());
   const [sort, setSort] = useState<SortKey>('newest');
   const [sounds, setSounds] = useState<Sound[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -41,31 +42,51 @@ export function SearchScreen() {
     }, [route.params?.query]),
   );
 
+  useEffect(() => {
+    const id = setTimeout(() => setDebounced(query.trim()), 250);
+    return () => clearTimeout(id);
+  }, [query]);
+
   const load = useCallback(async () => {
-    let q = supabase.from('sounds').select('*').eq('status', 'published');
-    if (sort === 'newest') q = q.order('created_at', { ascending: false });
-    if (sort === 'popular') q = q.order('play_count', { ascending: false });
-    if (sort === 'rating') q = q.order('average_rating', { ascending: false });
-    const { data } = await q;
+    const q = debounced;
+    const safe = q.replace(/[%_,]/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!safe) {
+      setSounds([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    let req = supabase
+      .from('sounds')
+      .select('*')
+      .eq('status', 'published')
+      .or(`title.ilike.%${safe}%,description.ilike.%${safe}%`)
+      .limit(40);
+    if (sort === 'newest') req = req.order('created_at', { ascending: false });
+    if (sort === 'popular') req = req.order('play_count', { ascending: false });
+    if (sort === 'rating') req = req.order('average_rating', { ascending: false });
+    const { data } = await req;
     setSounds((data as Sound[]) ?? []);
     setLoading(false);
-  }, [sort]);
+  }, [debounced, sort]);
 
-  useFocusEffect(
-    useCallback(() => {
-      load();
-    }, [load]),
-  );
+  useEffect(() => {
+    void load();
+  }, [load]);
 
-  const filtered = useMemo(() => {
+  const suggestions = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return sounds;
-    return sounds.filter(
-      (s) =>
-        s.title.toLowerCase().includes(q) ||
-        (s.description ?? '').toLowerCase().includes(q),
-    );
-  }, [sounds, query]);
+    if (!q || q === debounced.toLowerCase()) return sounds.slice(0, 8);
+    return sounds
+      .filter(
+        (s) =>
+          s.title.toLowerCase().includes(q) ||
+          (s.description ?? '').toLowerCase().includes(q),
+      )
+      .slice(0, 8);
+  }, [sounds, query, debounced]);
+
+  const showResults = debounced.length > 0;
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
@@ -74,13 +95,9 @@ export function SearchScreen() {
         style={StyleSheet.absoluteFill}
       />
       <View style={{ paddingTop: insets.top + 12, paddingHorizontal: 20 }}>
-        <Text style={[styles.title, { color: colors.text }]}>
-          {query.trim() ? 'Search' : 'All sounds'}
-        </Text>
+        <Text style={[styles.title, { color: colors.text }]}>Search</Text>
         <Text style={[styles.sub, { color: colors.textMuted }]}>
-          {query.trim()
-            ? 'Find rain, forest, ocean, thunder, and more'
-            : 'Browse the full published catalog'}
+          Type to find rain, forest, ocean, thunder, and more
         </Text>
         <View
           style={[
@@ -99,6 +116,7 @@ export function SearchScreen() {
             value={query}
             onChangeText={setQuery}
             autoCorrect={false}
+            autoFocus={!!route.params?.query}
           />
           {query ? (
             <Pressable onPress={() => setQuery('')}>
@@ -106,42 +124,67 @@ export function SearchScreen() {
             </Pressable>
           ) : null}
         </View>
-        <View style={styles.sortRow}>
-          {(['newest', 'popular', 'rating'] as SortKey[]).map((key) => {
-            const selected = sort === key;
-            return (
+
+        {query.trim() && suggestions.length > 0 ? (
+          <View style={styles.suggestWrap}>
+            {suggestions.map((s) => (
               <Pressable
-                key={key}
-                onPress={() => setSort(key)}
-                style={[
-                  styles.sortChip,
-                  {
-                    backgroundColor: selected ? colors.inverse : 'transparent',
-                    borderColor: colors.border,
-                  },
-                ]}
+                key={`sg-${s.id}`}
+                onPress={() => setQuery(s.title)}
+                style={[styles.suggestRow, { borderColor: colors.border }]}
               >
-                <Text
-                  style={{
-                    color: selected ? colors.inverseText : colors.textMuted,
-                    fontFamily: 'DMSans_700Bold',
-                    fontSize: 12,
-                    textTransform: 'capitalize',
-                  }}
-                >
-                  {key}
+                <Ionicons name="musical-note-outline" size={14} color={colors.textMuted} />
+                <Text style={{ color: colors.text, fontFamily: 'DMSans_500Medium', flex: 1 }} numberOfLines={1}>
+                  {s.title}
                 </Text>
               </Pressable>
-            );
-          })}
-        </View>
+            ))}
+          </View>
+        ) : null}
+
+        {showResults ? (
+          <View style={styles.sortRow}>
+            {(['newest', 'popular', 'rating'] as SortKey[]).map((key) => {
+              const selected = sort === key;
+              return (
+                <Pressable
+                  key={key}
+                  onPress={() => setSort(key)}
+                  style={[
+                    styles.sortChip,
+                    {
+                      backgroundColor: selected ? colors.inverse : 'transparent',
+                      borderColor: colors.border,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={{
+                      color: selected ? colors.inverseText : colors.textMuted,
+                      fontFamily: 'DMSans_700Bold',
+                      fontSize: 12,
+                      textTransform: 'capitalize',
+                    }}
+                  >
+                    {key}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        ) : null}
       </View>
 
-      {loading ? (
+      {!showResults ? (
+        <EmptyBlock
+          title="Search sounds"
+          body="Start typing to see matching sounds. Nothing loads until you search."
+        />
+      ) : loading ? (
         <ActivityIndicator color={colors.icon} style={{ marginTop: 32 }} />
       ) : (
         <FlatList
-          data={filtered}
+          data={sounds}
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 40, paddingTop: 8 }}
           ListEmptyComponent={
@@ -151,11 +194,11 @@ export function SearchScreen() {
             <SoundCard
               sound={item}
               onPress={async () => {
-                const index = filtered.findIndex((s) => s.id === item.id);
+                const index = sounds.findIndex((s) => s.id === item.id);
                 const started = await playSound(item, {
-                  queue: filtered,
+                  queue: sounds,
                   queueIndex: index,
-                  queueLabel: query.trim() ? 'Search results' : 'All sounds',
+                  queueLabel: 'Search results',
                 });
                 if (started) navigation.navigate('Player', { soundId: item.id });
               }}
@@ -184,6 +227,16 @@ const styles = StyleSheet.create({
     paddingVertical: 13,
     fontFamily: 'DMSans_400Regular',
     fontSize: 15,
+  },
+  suggestWrap: { gap: 6, marginBottom: 10 },
+  suggestRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
   sortRow: { flexDirection: 'row', gap: 8, marginBottom: 8 },
   sortChip: {

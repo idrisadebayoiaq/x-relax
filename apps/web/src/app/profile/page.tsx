@@ -11,12 +11,11 @@ import {
   Heart,
   LogOut,
   Mic,
-  Moon,
   Music2,
   Settings2,
+  Share2,
   Shield,
   ShieldCheck,
-  SlidersHorizontal,
   ArrowDownCircle,
   Clock3,
 } from 'lucide-react';
@@ -49,12 +48,19 @@ export default function ProfilePage() {
     refreshProfile,
   } = useAuth();
   const fileRef = useRef<HTMLInputElement>(null);
+  const bannerRef = useRef<HTMLInputElement>(null);
   const [displayName, setDisplayName] = useState(profile?.display_name ?? '');
   const [countryCode, setCountryCode] = useState(profile?.country_code ?? '');
+  const [bio, setBio] = useState(profile?.bio ?? '');
+  const [city, setCity] = useState(profile?.city ?? '');
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [bannerFile, setBannerFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [bannerPreview, setBannerPreview] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [apkUrl, setApkUrl] = useState('');
   const [isVerifiedCreator, setIsVerifiedCreator] = useState(false);
   const [stats, setStats] = useState<ProfileStats>({
     soundsSaved: 0,
@@ -66,7 +72,23 @@ export default function ProfilePage() {
   useEffect(() => {
     setDisplayName(profile?.display_name ?? '');
     setCountryCode(profile?.country_code ?? '');
-  }, [profile?.display_name, profile?.country_code]);
+    setBio(profile?.bio ?? '');
+    setCity(profile?.city ?? '');
+  }, [profile?.display_name, profile?.country_code, profile?.bio, profile?.city]);
+
+  useEffect(() => {
+    createClient()
+      .from('app_releases')
+      .select('download_url, apk_path, status')
+      .neq('status', 'archived')
+      .order('sort_order', { ascending: true })
+      .limit(1)
+      .then(({ data }) => {
+        const row = data?.[0] as { download_url?: string | null; apk_path?: string | null } | undefined;
+        const url = row?.download_url || row?.apk_path || '';
+        if (url) setApkUrl(url);
+      });
+  }, []);
 
   useEffect(() => {
     void refreshProfile();
@@ -126,7 +148,9 @@ export default function ProfilePage() {
   }, [user?.id, canDownloadOffline]);
 
   const showBlueBadge =
-    isVerifiedCreator || !!adminProfile?.has_verified_badge || adminProfile?.role === 'super';
+    (isCreator || isAdmin) &&
+    (isVerifiedCreator || !!adminProfile?.has_verified_badge || adminProfile?.role === 'super');
+  const showWhiteBadge = !isCreator && !isAdmin && isPremium;
   const premiumActive = isPremium;
   const roleLabel =
     profile?.role === 'admin'
@@ -147,15 +171,25 @@ export default function ProfilePage() {
       return;
     }
     setBusy(true);
-    const { error } = await updateProfile({ displayName, avatarFile, countryCode });
+    const { error } = await updateProfile({
+      displayName,
+      avatarFile,
+      bannerFile,
+      bio,
+      city,
+      countryCode,
+    });
     setBusy(false);
     if (error) {
       alert(error);
       return;
     }
     setAvatarFile(null);
+    setBannerFile(null);
     if (avatarPreview) URL.revokeObjectURL(avatarPreview);
+    if (bannerPreview) URL.revokeObjectURL(bannerPreview);
     setAvatarPreview(null);
+    setBannerPreview(null);
     setEditOpen(false);
   };
 
@@ -223,10 +257,12 @@ export default function ProfilePage() {
           <p className="text-2xl font-serif font-semibold">
             {profile?.display_name ?? 'Listener'}
           </p>
-          {isPremium ? <VerifiedBadge tone="white" size={18} /> : null}
+          {showWhiteBadge ? <VerifiedBadge tone="white" size={18} /> : null}
           {showBlueBadge ? <VerifiedBadge tone="blue" size={18} /> : null}
         </div>
-        <p className="text-sm text-muted">{user?.email ?? '—'}</p>
+        <p className="text-sm text-muted">
+          {[profile?.city, profile?.country_code].filter(Boolean).join(' · ') || roleLabel}
+        </p>
         <div className="flex flex-wrap gap-2 justify-center">
           <span className="chip">{roleLabel}</span>
           {premiumActive ? (
@@ -259,6 +295,34 @@ export default function ProfilePage() {
       </div>
 
       <Section title="Account">
+        <button
+          type="button"
+          className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-background/60"
+          onClick={() => setEditOpen(true)}
+        >
+          <span className="h-9 w-9 rounded-xl flex items-center justify-center" style={{ background: 'rgba(201,162,39,0.16)' }}>
+            <Settings2 size={18} color={GOLD} />
+          </span>
+          <span className="flex-1 min-w-0">
+            <span className="block font-semibold text-sm">Edit profile</span>
+            <span className="block text-xs text-muted mt-0.5">Banner, photo, bio, city, and country.</span>
+          </span>
+          <ChevronRight size={18} className="text-muted" />
+        </button>
+        <button
+          type="button"
+          className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-background/60 border-t border-border"
+          onClick={() => setShareOpen(true)}
+        >
+          <span className="h-9 w-9 rounded-xl flex items-center justify-center bg-green-500/15">
+            <Share2 size={18} className="text-green-500" />
+          </span>
+          <span className="flex-1 min-w-0">
+            <span className="block font-semibold text-sm">Share app</span>
+            <span className="block text-xs text-muted mt-0.5">Send the APK download link to friends.</span>
+          </span>
+          <ChevronRight size={18} className="text-muted" />
+        </button>
         {!isCreator ? (
           <Row
             href="/creator/become"
@@ -313,30 +377,12 @@ export default function ProfilePage() {
 
       <Section title="Preferences">
         <Row
-          href="/premium"
-          icon={<Moon size={18} className="text-blue-500" />}
+          href="/settings"
+          icon={<Settings2 size={18} className="text-blue-500" />}
           iconBg="rgba(59,130,246,0.16)"
-          label="Playback & Downloads"
-          hint="Streaming quality, downloads, and storage."
+          label="Settings"
+          hint="Theme, volume, downloads, privacy, and more."
         />
-        <button
-          type="button"
-          className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-background/60"
-          onClick={() =>
-            alert('Theme currently follows your system appearance. More options coming soon.')
-          }
-        >
-          <span className="h-9 w-9 rounded-xl flex items-center justify-center bg-teal-500/15">
-            <SlidersHorizontal size={18} className="text-teal-500" />
-          </span>
-          <span className="flex-1 min-w-0">
-            <span className="block font-semibold text-sm">App Preferences</span>
-            <span className="block text-xs text-muted mt-0.5">
-              Theme follows your device settings.
-            </span>
-          </span>
-          <ChevronRight size={18} className="text-muted" />
-        </button>
       </Section>
 
       <Section title="Legal">
@@ -367,8 +413,38 @@ export default function ProfilePage() {
 
       {editOpen ? (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center p-4">
-          <div className="w-full max-w-md rounded-2xl bg-surface border border-border p-5 space-y-4">
+          <div className="w-full max-w-md rounded-2xl bg-surface border border-border p-5 space-y-4 max-h-[90vh] overflow-y-auto">
             <h2 className="text-xl font-serif font-bold">Edit profile</h2>
+            <button
+              type="button"
+              className="w-full overflow-hidden rounded-xl border border-border"
+              onClick={() => bannerRef.current?.click()}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              {(bannerPreview || profile?.banner_url) ? (
+                <img
+                  src={bannerPreview ?? profile?.banner_url ?? ''}
+                  alt=""
+                  className="h-24 w-full object-cover"
+                />
+              ) : (
+                <div className="h-24 w-full bg-background flex items-center justify-center text-sm" style={{ color: GOLD }}>
+                  Add banner
+                </div>
+              )}
+            </button>
+            <input
+              ref={bannerRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0] ?? null;
+                setBannerFile(file);
+                if (bannerPreview) URL.revokeObjectURL(bannerPreview);
+                setBannerPreview(file ? URL.createObjectURL(file) : null);
+              }}
+            />
             <button
               type="button"
               className="flex items-center gap-3 text-sm"
@@ -389,8 +465,20 @@ export default function ProfilePage() {
               onChange={(e) => setDisplayName(e.target.value)}
               placeholder="Display name"
             />
+            <textarea
+              className="input min-h-[80px]"
+              value={bio}
+              onChange={(e) => setBio(e.target.value)}
+              placeholder="Bio"
+            />
+            <input
+              className="input"
+              value={city}
+              onChange={(e) => setCity(e.target.value)}
+              placeholder="City"
+            />
             <label className="block space-y-1">
-              <span className="text-xs uppercase tracking-wide text-muted">Country</span>
+              <span className="text-xs uppercase tracking-wide text-muted">Country / region</span>
               <select
                 className="input w-full"
                 value={countryCode}
@@ -418,6 +506,90 @@ export default function ProfilePage() {
                 {busy ? 'Saving…' : 'Save'}
               </button>
             </div>
+          </div>
+        </div>
+      ) : null}
+
+      {shareOpen ? (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center p-4">
+          <div className="w-full max-w-md rounded-2xl bg-surface border border-border p-5 space-y-3">
+            <h2 className="text-xl font-serif font-bold">Share X-Relax</h2>
+            <p className="text-sm text-muted break-all">{apkUrl || 'Loading download link…'}</p>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                className="btn btn-outline"
+                disabled={!apkUrl}
+                onClick={async () => {
+                  await navigator.clipboard.writeText(apkUrl);
+                  alert('Link copied — paste it to WhatsApp Status or anywhere.');
+                }}
+              >
+                Copy link
+              </button>
+              <button
+                type="button"
+                className="btn btn-outline"
+                disabled={!apkUrl}
+                onClick={() => {
+                  const text = encodeURIComponent(
+                    `Relax with me on X-Relax — free calming sounds.\n\nDownload:\n${apkUrl}`,
+                  );
+                  window.open(`https://wa.me/?text=${text}`, '_blank');
+                }}
+              >
+                WhatsApp
+              </button>
+              <button
+                type="button"
+                className="btn btn-outline"
+                disabled={!apkUrl}
+                onClick={async () => {
+                  await navigator.clipboard.writeText(apkUrl);
+                  const text = encodeURIComponent(
+                    `Relax with me on X-Relax — free calming sounds.\n\nDownload:\n${apkUrl}`,
+                  );
+                  window.open(`https://wa.me/?text=${text}`, '_blank');
+                }}
+              >
+                WA Status
+              </button>
+              <button
+                type="button"
+                className="btn btn-outline"
+                disabled={!apkUrl}
+                onClick={() => {
+                  window.open(
+                    `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(apkUrl)}`,
+                    '_blank',
+                  );
+                }}
+              >
+                Facebook
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary col-span-2"
+                disabled={!apkUrl}
+                onClick={() => {
+                  if (navigator.share) {
+                    void navigator.share({
+                      title: 'X-Relax',
+                      text: 'Relax with me on X-Relax',
+                      url: apkUrl,
+                    });
+                  } else {
+                    void navigator.clipboard.writeText(apkUrl);
+                    alert('Link copied');
+                  }
+                }}
+              >
+                Share…
+              </button>
+            </div>
+            <button type="button" className="btn btn-outline w-full" onClick={() => setShareOpen(false)}>
+              Close
+            </button>
           </div>
         </div>
       ) : null}

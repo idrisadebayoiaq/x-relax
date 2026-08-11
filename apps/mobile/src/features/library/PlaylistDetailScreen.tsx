@@ -19,10 +19,21 @@ import { moodPaletteFor, formatDuration } from '../../lib/format';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../auth/AuthProvider';
 import { usePlayer } from '../player/PlayerProvider';
+import { useAppSettings } from '../../lib/AppSettingsProvider';
+import { cachePlaylistDetail, loadCachedPlaylistDetail } from '../../lib/offlineCache';
 import type { Playlist, Sound } from '../../types/database';
 import type { RootStackParamList } from '../../navigation/types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PlaylistDetail'>;
+
+const MIX_SOUND_PREFIX = '__xrelax_mix__:';
+
+function mixIdFromSound(sound: Sound): string | null {
+  const desc = sound.description ?? '';
+  if (!desc.startsWith(MIX_SOUND_PREFIX)) return null;
+  const id = desc.slice(MIX_SOUND_PREFIX.length).trim();
+  return id || null;
+}
 
 export function PlaylistDetailScreen() {
   const { colors, isDark } = useAppTheme();
@@ -30,6 +41,7 @@ export function PlaylistDetailScreen() {
   const route = useRoute<Props['route']>();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { user } = useAuth();
+  const { online } = useAppSettings();
   const { playSound, current, isPlaying, togglePlay } = usePlayer();
   const [playlist, setPlaylist] = useState<Playlist | null>(null);
   const [ownerName, setOwnerName] = useState<string | null>(null);
@@ -42,32 +54,64 @@ export function PlaylistDetailScreen() {
 
   const load = useCallback(async () => {
     const playlistId = route.params.playlistId;
-    const [{ data: pl }, { data: items }] = await Promise.all([
-      supabase.from('playlists').select('*').eq('id', playlistId).maybeSingle(),
-      supabase
-        .from('playlist_items')
-        .select('position, sound:sounds(*)')
-        .eq('playlist_id', playlistId)
-        .order('position', { ascending: true }),
-    ]);
 
-    const nextSounds = ((items as any[]) ?? []).map((i) => i.sound).filter(Boolean) as Sound[];
-    setSounds(nextSounds);
+    if (!online) {
+      const cached = await loadCachedPlaylistDetail(playlistId);
+      if (cached) {
+        setPlaylist(cached.playlist);
+        setOwnerName(cached.ownerName);
+        setSounds(cached.sounds);
+      } else {
+        setPlaylist(null);
+        setSounds([]);
+      }
+      setLoading(false);
+      return;
+    }
 
-    if (pl) {
-      const cover = pl.cover_url ?? nextSounds[0]?.cover_url ?? null;
-      setPlaylist({ ...(pl as Playlist), cover_url: cover });
-      const { data: owner } = await supabase
-        .from('profiles')
-        .select('display_name')
-        .eq('id', pl.user_id)
-        .maybeSingle();
-      setOwnerName(owner?.display_name ?? null);
-    } else {
-      setPlaylist(null);
+    try {
+      const [{ data: pl }, { data: items }] = await Promise.all([
+        supabase.from('playlists').select('*').eq('id', playlistId).maybeSingle(),
+        supabase
+          .from('playlist_items')
+          .select('position, sound:sounds(*)')
+          .eq('playlist_id', playlistId)
+          .order('position', { ascending: true }),
+      ]);
+
+      const nextSounds = ((items as any[]) ?? []).map((i) => i.sound).filter(Boolean) as Sound[];
+      setSounds(nextSounds);
+
+      if (pl) {
+        const cover = pl.cover_url ?? nextSounds[0]?.cover_url ?? null;
+        const nextPlaylist = { ...(pl as Playlist), cover_url: cover };
+        setPlaylist(nextPlaylist);
+        const { data: owner } = await supabase
+          .from('profiles')
+          .select('display_name')
+          .eq('id', pl.user_id)
+          .maybeSingle();
+        const name = owner?.display_name ?? null;
+        setOwnerName(name);
+        await cachePlaylistDetail({
+          playlist: nextPlaylist,
+          ownerName: name,
+          sounds: nextSounds,
+          updatedAt: new Date().toISOString(),
+        });
+      } else {
+        setPlaylist(null);
+      }
+    } catch {
+      const cached = await loadCachedPlaylistDetail(playlistId);
+      if (cached) {
+        setPlaylist(cached.playlist);
+        setOwnerName(cached.ownerName);
+        setSounds(cached.sounds);
+      }
     }
     setLoading(false);
-  }, [route.params.playlistId]);
+  }, [route.params.playlistId, online]);
 
   useFocusEffect(
     useCallback(() => {
@@ -77,6 +121,10 @@ export function PlaylistDetailScreen() {
 
   const toggleVisibility = async () => {
     if (!playlist || !isOwner) return;
+    if (!online) {
+      Alert.alert('Offline', 'Connect to change playlist visibility.');
+      return;
+    }
     const next = playlist.visibility === 'public' ? 'private' : 'public';
     setBusy(true);
     const { error } = await supabase
@@ -91,14 +139,27 @@ export function PlaylistDetailScreen() {
     setPlaylist({ ...playlist, visibility: next });
   };
 
-  const playAll = async () => {
-    if (!sounds.length) return;
-    const started = await playSound(sounds[0], {
+  const openOrPlay = async (item: Sound, index: number) => {
+    const mixId = mixIdFromSound(item);
+    if (mixId) {
+      navigation.navigate('MixStudio', { mixId });
+      return;
+    }
+    if (current?.id === item.id) {
+      void togglePlay();
+      return;
+    }
+    const started = await playSound(item, {
       queue: sounds,
-      queueIndex: 0,
+      queueIndex: index,
       queueLabel: playlist?.title ?? 'Playlist',
     });
-    if (started) navigation.navigate('Player', { soundId: sounds[0].id });
+    if (started) navigation.navigate('Player', { soundId: item.id });
+  };
+
+  const playAll = async () => {
+    if (!sounds.length) return;
+    await openOrPlay(sounds[0], 0);
   };
 
   const cover = playlist?.cover_url ?? sounds[0]?.cover_url;
@@ -148,6 +209,7 @@ export function PlaylistDetailScreen() {
                 {ownerName ?? 'Playlist'}
                 {` · ${sounds.length} sound${sounds.length === 1 ? '' : 's'}`}
                 {` · ${playlist?.visibility === 'public' ? 'Public' : 'Private'}`}
+                {!online ? ' · Offline' : ''}
               </Text>
 
               <View style={styles.actions}>
@@ -179,21 +241,7 @@ export function PlaylistDetailScreen() {
             const isLast = index === sounds.length - 1;
             const active = current?.id === item.id;
             return (
-              <Pressable
-                onPress={async () => {
-                  if (active) {
-                    void togglePlay();
-                    return;
-                  }
-                  const started = await playSound(item, {
-                    queue: sounds,
-                    queueIndex: index,
-                    queueLabel: playlist?.title ?? 'Playlist',
-                  });
-                  if (started) navigation.navigate('Player', { soundId: item.id });
-                }}
-                style={styles.trackRow}
-              >
+              <Pressable onPress={() => void openOrPlay(item, index)} style={styles.trackRow}>
                 <View style={styles.trackArt}>
                   {item.cover_url ? (
                     <Image
@@ -226,6 +274,7 @@ export function PlaylistDetailScreen() {
                   </Text>
                   <Text style={[styles.trackMeta, { color: colors.textMuted }]} numberOfLines={1}>
                     {formatDuration(item.duration_seconds)}
+                    {mixIdFromSound(item) ? ' · Mix' : ''}
                     {item.average_rating
                       ? ` · ${Number(item.average_rating).toFixed(1)}★`
                       : ''}

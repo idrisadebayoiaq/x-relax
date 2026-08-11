@@ -18,6 +18,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../auth/AuthProvider';
 import { useMix, type SavedMix } from '../mix/MixProvider';
 import { CoverArt } from '../home/CoverArt';
+import { formatElapsed, formatDuration } from '../../lib/format';
 import type { Category, Sound } from '../../types/database';
 import type { RootStackParamList } from '../../navigation/types';
 
@@ -90,6 +91,8 @@ export function MixStudioScreen({ navigation, route }: Props) {
     layers,
     mixTitle,
     isMixPlaying,
+    sessionElapsedSec,
+    savedDurationSec,
     maxTracks,
     setMixTitle,
     addSound,
@@ -144,7 +147,7 @@ export function MixStudioScreen({ navigation, route }: Props) {
         ...(data as SavedMix),
         tracks: [...((data as SavedMix).tracks ?? [])].sort((a, b) => a.position - b.position),
       };
-      await loadSavedMix(mix, false);
+      await loadSavedMix(mix, true);
     })();
   }, [route.params?.mixId, canUseMixes, loadSavedMix]);
 
@@ -195,10 +198,11 @@ export function MixStudioScreen({ navigation, route }: Props) {
       ]);
       return;
     }
+    const elapsedLabel = formatElapsed(sessionElapsedSec);
     if (Platform.OS === 'ios' && typeof Alert.prompt === 'function') {
       Alert.prompt(
         'Save Mix',
-        'Saved mixes appear in Library → My Mixes',
+        `Played ${elapsedLabel}. That time becomes the mix duration. Saved to My Mixes + playlist “My Mix”.`,
         [
           { text: 'Cancel', style: 'cancel' },
           {
@@ -214,16 +218,20 @@ export function MixStudioScreen({ navigation, route }: Props) {
       );
       return;
     }
-    Alert.alert('Save Mix', `Save "${mixTitle}" to Library → My Mixes?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Save',
-        onPress: () => {
-          setSaving(true);
-          void saveMix(mixTitle).finally(() => setSaving(false));
+    Alert.alert(
+      'Save Mix',
+      `Save "${mixTitle}" (${elapsedLabel} played) to My Mixes?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Save',
+          onPress: () => {
+            setSaving(true);
+            void saveMix(mixTitle).finally(() => setSaving(false));
+          },
         },
-      },
-    ]);
+      ],
+    );
   };
 
   if (!canUseMixes) {
@@ -280,7 +288,7 @@ export function MixStudioScreen({ navigation, route }: Props) {
             style={[styles.titleInput, { color: colors.text, borderColor: colors.border }]}
           />
           <Text style={[styles.hint, { color: colors.textMuted }]}>
-            {layers.length}/{maxTracks} sounds · Save stores this mix in Library → My Mixes
+            {layers.length}/{maxTracks} sounds · Play time becomes the mix duration when you save
           </Text>
         </View>
 
@@ -322,7 +330,20 @@ export function MixStudioScreen({ navigation, route }: Props) {
 
         {/* Transport */}
         {layers.length ? (
-          <View style={styles.transport}>
+          <View style={styles.transportBlock}>
+            <Text style={[styles.timer, { color: colors.text }]}>
+              {formatElapsed(sessionElapsedSec)}
+              {savedDurationSec ? (
+                <Text style={{ color: colors.textMuted }}>
+                  {' '}
+                  / {formatDuration(savedDurationSec) || formatElapsed(savedDurationSec)}
+                </Text>
+              ) : null}
+            </Text>
+            <Text style={[styles.timerHint, { color: colors.textMuted }]}>
+              {isMixPlaying ? 'Recording mix length…' : 'Duration counts while playing'}
+            </Text>
+            <View style={styles.transport}>
             <Pressable
               onPress={() => {
                 Alert.alert('Sleep timer', 'Stop the whole mix when time is up.', [
@@ -357,6 +378,7 @@ export function MixStudioScreen({ navigation, route }: Props) {
             >
               <Ionicons name="refresh-outline" size={20} color={colors.text} />
             </Pressable>
+          </View>
           </View>
         ) : null}
 
@@ -506,6 +528,22 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
   },
   volPct: { fontFamily: 'DMSans_500Medium', fontSize: 12, width: 40, textAlign: 'right' },
+  transportBlock: {
+    alignItems: 'center',
+    marginTop: 20,
+    marginBottom: 8,
+    gap: 6,
+  },
+  timer: {
+    fontFamily: 'Fraunces_700Bold',
+    fontSize: 36,
+    letterSpacing: -0.5,
+  },
+  timerHint: {
+    fontFamily: 'DMSans_400Regular',
+    fontSize: 12,
+    marginBottom: 8,
+  },
   transport: {
     flexDirection: 'row',
     alignItems: 'center',

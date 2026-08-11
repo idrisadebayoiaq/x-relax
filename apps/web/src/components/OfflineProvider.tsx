@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import { isOnline } from '@/lib/offline-storage';
 
@@ -29,33 +30,34 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const offlineAllowed = canDownloadOffline;
-  const blockedOffline = !loading && !online && !offlineAllowed;
+  // Never hard-block the whole app — let users open Library / Downloads offline.
+  const blockedOffline = false;
 
   const value = useMemo(
     () => ({ online, offlineAllowed, blockedOffline }),
     [online, offlineAllowed, blockedOffline],
   );
 
-  if (blockedOffline) {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-8 text-center">
-        <div className="card max-w-md p-8 space-y-3">
-          <h1 className="text-2xl font-serif font-bold">You&apos;re offline</h1>
-          <p className="text-muted">
-            Free accounts need an internet connection to listen. Upgrade to Premium to download sounds
-            and use X-Relax offline.
-          </p>
-          <a href="/premium" className="btn btn-primary inline-block">View Premium</a>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <OfflineContext.Provider value={value}>
-      {!online && offlineAllowed ? (
-        <div className="bg-foreground text-background text-center text-sm py-2 px-4">
-          Offline mode · only downloaded sounds are available
+      {!online ? (
+        <div className="bg-foreground text-background text-center text-sm py-2 px-4 space-y-1">
+          <p>Offline mode · only downloaded sounds can play</p>
+          {!offlineAllowed && !loading ? (
+            <p>
+              Free accounts need Premium to download.{' '}
+              <Link href="/premium" className="underline">
+                Upgrade
+              </Link>
+            </p>
+          ) : (
+            <p>
+              Open{' '}
+              <Link href="/library" className="underline">
+                Library → Downloads
+              </Link>
+            </p>
+          )}
         </div>
       ) : null}
       {children}
