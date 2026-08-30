@@ -1,6 +1,6 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import type { AudioOutputRoute } from 'expo-audio-route';
+import type { AudioOutputRoute } from '../../lib/audioOutputTypes';
 import type { ThemeColors } from '../../lib/theme';
 
 type Props = {

@@ -1,6 +1,6 @@
 {
   "name": "x-relax",
-  "version": "1.0.13",
+  "version": "1.0.14",
   "main": "index.ts",
   "dependencies": {
     "@expo-google-fonts/dm-sans": "^0.4.2",

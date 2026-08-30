@@ -1,21 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Platform } from 'react-native';
-import type { AudioOutputRoute } from 'expo-audio-route';
+import type { AudioOutputRoute } from './audioOutputTypes';
+import { UNKNOWN_AUDIO_ROUTE, isPrivateListening, shouldShowHeadsetTip } from './audioOutputTypes';
 
-const FALLBACK: AudioOutputRoute = { kind: 'unknown', name: '' };
-
-async function loadRoute(): Promise<AudioOutputRoute> {
-  if (Platform.OS === 'web') return FALLBACK;
-  try {
-    const mod = await import('expo-audio-route');
-    return await mod.getCurrentAudioRoute();
-  } catch {
-    return FALLBACK;
-  }
-}
+export { isPrivateListening, shouldShowHeadsetTip };
 
 export function useAudioOutputRoute(): AudioOutputRoute {
-  const [route, setRoute] = useState<AudioOutputRoute>(FALLBACK);
+  const [route, setRoute] = useState<AudioOutputRoute>(UNKNOWN_AUDIO_ROUTE);
 
   useEffect(() => {
     if (Platform.OS === 'web') return;
@@ -32,8 +23,7 @@ export function useAudioOutputRoute(): AudioOutputRoute {
           if (active) setRoute(updated);
         });
       } catch {
-        const next = await loadRoute();
-        if (active) setRoute(next);
+        if (active) setRoute(UNKNOWN_AUDIO_ROUTE);
       }
     })();
 
@@ -44,12 +34,4 @@ export function useAudioOutputRoute(): AudioOutputRoute {
   }, []);
 
   return route;
-}
-
-export function isPrivateListening(route: AudioOutputRoute): boolean {
-  return route.kind === 'wired' || route.kind === 'bluetooth' || route.kind === 'earpiece';
-}
-
-export function shouldShowHeadsetTip(route: AudioOutputRoute): boolean {
-  return route.kind === 'speaker' || route.kind === 'unknown';
 }

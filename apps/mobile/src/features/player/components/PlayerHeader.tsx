@@ -1,7 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { ThemeColors } from '../../lib/theme';
-import type { AudioOutputRoute } from 'expo-audio-route';
+import type { AudioOutputRoute } from '../../lib/audioOutputTypes';
 import { AudioOutputBadge } from './AudioOutputBadge';
 
 type Props = {

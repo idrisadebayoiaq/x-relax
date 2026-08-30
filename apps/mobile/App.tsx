@@ -26,6 +26,7 @@ import { isSupabaseConfigured } from './src/lib/supabase';
 import { recordAppOpen } from './src/lib/analytics';
 import { DownloadProvider } from './src/features/downloads/DownloadProvider';
 import { DownloadBanner } from './src/features/downloads/DownloadBanner';
+import { AppDialogHost } from './src/ui/AppDialog';
 
 SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
@@ -103,6 +104,12 @@ export default function App() {
     DMSans_500Medium,
     DMSans_700Bold,
   });
+
+  useEffect(() => {
+    if (fontsLoaded) {
+      SplashScreen.hideAsync().catch(() => undefined);
+    }
+  }, [fontsLoaded]);
 
   if (!fontsLoaded) {
     return (
