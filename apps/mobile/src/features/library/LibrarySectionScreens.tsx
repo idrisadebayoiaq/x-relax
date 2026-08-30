@@ -17,6 +17,8 @@ import { formatDuration, formatElapsed, formatPlayCount } from '../../lib/format
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../auth/AuthProvider';
 import { usePlayer } from '../player/PlayerProvider';
+import { appAlert } from '../../ui/appAlert';
+import { removeFavorite, deleteDownload, deleteMix, isRenderedMixSound } from '../../lib/libraryActions';
 import { useAppSettings } from '../../lib/AppSettingsProvider';
 import { SoundCard } from '../../ui/Cards';
 import {
@@ -177,8 +179,29 @@ export function FavouritesListScreen() {
                   </Text>
                 </View>
                 {active && isPlaying ? (
-                  <Ionicons name="pause" size={18} color={colors.text} style={{ marginRight: 16 }} />
+                  <Ionicons name="pause" size={18} color={colors.text} style={{ marginRight: 8 }} />
                 ) : null}
+                <Pressable
+                  onPress={() => {
+                    if (!user) return;
+                    appAlert('Remove favourite', `Remove "${item.title}" from favourites?`, [
+                      { text: 'Cancel', style: 'cancel' },
+                      {
+                        text: 'Remove',
+                        style: 'destructive',
+                        onPress: async () => {
+                          const { error } = await removeFavorite(user.id, item.id);
+                          if (error) appAlert('Could not remove', error);
+                          else void load();
+                        },
+                      },
+                    ]);
+                  }}
+                  hitSlop={8}
+                  style={{ paddingRight: 16 }}
+                >
+                  <Ionicons name="heart-dislike-outline" size={20} color={colors.textMuted} />
+                </Pressable>
               </Pressable>
             );
           }}
@@ -273,22 +296,48 @@ export function DownloadsListScreen() {
             </Text>
           }
           renderItem={({ item }) => (
-            <SoundCard
-              sound={item}
-              onPress={async () => {
-                const playable = item.local_uri ? { ...item, audio_url: item.local_uri } : item;
-                const queue = items.map((entry) =>
-                  entry.local_uri ? { ...entry, audio_url: entry.local_uri } : entry,
-                );
-                const index = queue.findIndex((s) => s.id === item.id);
-                const started = await playSound(playable, {
-                  queue,
-                  queueIndex: index,
-                  queueLabel: 'Downloads',
-                });
-                if (started) navigation.navigate('Player', { soundId: item.id });
-              }}
-            />
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <View style={{ flex: 1 }}>
+                <SoundCard
+                  sound={item}
+                  onPress={async () => {
+                    const playable = item.local_uri ? { ...item, audio_url: item.local_uri } : item;
+                    const queue = items.map((entry) =>
+                      entry.local_uri ? { ...entry, audio_url: entry.local_uri } : entry,
+                    );
+                    const index = queue.findIndex((s) => s.id === item.id);
+                    const started = await playSound(playable, {
+                      queue,
+                      queueIndex: index,
+                      queueLabel: 'Downloads',
+                    });
+                    if (started) navigation.navigate('Player', { soundId: item.id });
+                  }}
+                />
+              </View>
+              {user ? (
+                <Pressable
+                  onPress={() => {
+                    appAlert('Delete download', `Remove offline copy of "${item.title}"?`, [
+                      { text: 'Cancel', style: 'cancel' },
+                      {
+                        text: 'Delete',
+                        style: 'destructive',
+                        onPress: async () => {
+                          const { error } = await deleteDownload(user.id, item.id);
+                          if (error) appAlert('Could not delete', error);
+                          else void load();
+                        },
+                      },
+                    ]);
+                  }}
+                  hitSlop={8}
+                  style={{ paddingRight: 8 }}
+                >
+                  <Ionicons name="trash-outline" size={20} color={colors.textMuted} />
+                </Pressable>
+              ) : null}
+            </View>
           )}
         />
       )}
@@ -302,6 +351,7 @@ export function LibraryMixesScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { user, canUseMixes } = useAuth();
   const { online } = useAppSettings();
+  const { playSound } = usePlayer();
   const [items, setItems] = useState<
     {
       id: string;
@@ -406,27 +456,60 @@ export function LibraryMixesScreen() {
             </Text>
           }
           renderItem={({ item }) => (
-            <Pressable
-              onPress={() => {
-                if (!canUseMixes) {
-                  navigation.navigate('Premium');
-                  return;
-                }
-                navigation.navigate('MixStudio', { mixId: item.id });
-              }}
-              style={[styles.mixRow, { borderColor: colors.border, backgroundColor: colors.surface }]}
-            >
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.mixTitle, { color: colors.text }]}>{item.title}</Text>
-                <Text style={{ color: colors.textMuted, fontFamily: 'DMSans_400Regular', fontSize: 12 }}>
-                  {item.trackCount} layer{item.trackCount === 1 ? '' : 's'}
-                  {item.durationSeconds > 0
-                    ? ` · ${formatElapsed(item.durationSeconds)}`
-                    : ''}
-                </Text>
-              </View>
-              <Ionicons name="play-circle-outline" size={26} color={colors.text} />
-            </Pressable>
+            <View style={[styles.mixRow, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+              <Pressable
+                style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}
+                onPress={async () => {
+                  if (!canUseMixes || !user) {
+                    navigation.navigate('Premium');
+                    return;
+                  }
+                  const { data } = await supabase
+                    .from('mixes')
+                    .select('sound:sounds(*)')
+                    .eq('id', item.id)
+                    .maybeSingle();
+                  const sound = (data as { sound?: Sound } | null)?.sound;
+                  if (sound && isRenderedMixSound(sound)) {
+                    const started = await playSound(sound, { queueLabel: 'My Mixes' });
+                    if (started) navigation.navigate('Player', { soundId: sound.id });
+                    return;
+                  }
+                  navigation.navigate('MixStudio', { mixId: item.id });
+                }}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.mixTitle, { color: colors.text }]}>{item.title}</Text>
+                  <Text style={{ color: colors.textMuted, fontFamily: 'DMSans_400Regular', fontSize: 12 }}>
+                    {item.durationSeconds > 0
+                      ? `Saved mix · ${formatElapsed(item.durationSeconds)}`
+                      : `${item.trackCount} layer${item.trackCount === 1 ? '' : 's'}`}
+                  </Text>
+                </View>
+                <Ionicons name="play-circle-outline" size={26} color={colors.text} />
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  if (!user) return;
+                  appAlert('Delete mix', `Delete "${item.title}" permanently?`, [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                      text: 'Delete',
+                      style: 'destructive',
+                      onPress: async () => {
+                        const { error } = await deleteMix(user.id, item.id);
+                        if (error) appAlert('Could not delete', error);
+                        else void load();
+                      },
+                    },
+                  ]);
+                }}
+                hitSlop={8}
+                style={{ paddingLeft: 8 }}
+              >
+                <Ionicons name="trash-outline" size={20} color={colors.textMuted} />
+              </Pressable>
+            </View>
           )}
         />
       )}

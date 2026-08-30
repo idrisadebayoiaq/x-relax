@@ -8,6 +8,7 @@ import { supabase } from './supabase';
 let handlerReady = false;
 
 const WELCOME_LOCAL_KEY = (id: string) => `xrelax:welcome_local_push:${id}`;
+const PUSH_PREF_KEY = 'xrelax.push.enabled.v1';
 
 function ensureNotificationHandler() {
   if (handlerReady) return;
@@ -38,19 +39,42 @@ async function ensureChannels() {
   if (Platform.OS !== 'android') return;
   await Notifications.setNotificationChannelAsync('default', {
     name: 'Default',
-    importance: Notifications.AndroidImportance.DEFAULT,
+    importance: Notifications.AndroidImportance.HIGH,
+    vibrationPattern: [0, 180, 120, 180],
+    lightColor: '#F5C400',
   });
   await Notifications.setNotificationChannelAsync('welcome', {
     name: 'Welcome',
     importance: Notifications.AndroidImportance.HIGH,
     description: 'Welcome messages after you join X-Relax',
+    vibrationPattern: [0, 180, 120, 180],
+    lightColor: '#F5C400',
   });
 }
 
-/**
- * Show the signup welcome as a system notification once
- * (covers the gap before FCM can deliver — no token at signup time).
- */
+let askOnNextSync = false;
+
+export function markPushAskOnNextSync() {
+  askOnNextSync = true;
+}
+
+export function consumePushAsk() {
+  const next = askOnNextSync;
+  askOnNextSync = false;
+  return next;
+}
+
+export async function readLocalPushPref(): Promise<boolean | null> {
+  const raw = await AsyncStorage.getItem(PUSH_PREF_KEY);
+  if (raw === '1') return true;
+  if (raw === '0') return false;
+  return null;
+}
+
+export async function writeLocalPushPref(enabled: boolean) {
+  await AsyncStorage.setItem(PUSH_PREF_KEY, enabled ? '1' : '0');
+}
+
 export async function presentWelcomePushIfNeeded(): Promise<void> {
   ensureNotificationHandler();
   try {
@@ -95,46 +119,64 @@ export async function presentWelcomePushIfNeeded(): Promise<void> {
   }
 }
 
-/** Register for FCM/APNs device push and store token for the signed-in user. */
-export async function registerForPushNotifications(): Promise<{
-  token: string | null;
-  error: string | null;
-}> {
+async function upsertCurrentToken(): Promise<{ token: string | null; error: string | null }> {
+  const devicePush = await Notifications.getDevicePushTokenAsync();
+  const token = devicePush.data;
+  if (!token || typeof token !== 'string') {
+    return { token: null, error: 'No device push token returned' };
+  }
+  const { error } = await supabase.rpc('upsert_push_token', {
+    p_token: token,
+    p_platform: resolvePlatform(),
+  });
+  if (error) return { token: null, error: error.message };
+  return { token, error: null };
+}
+
+/**
+ * Keep the FCM/APNs token fresh.
+ * ask=false: never prompt again — only refresh if already granted and not turned off.
+ * ask=true: request OS permission (signup / settings toggle on).
+ */
+export async function syncPushRegistration(opts?: {
+  ask?: boolean;
+  enabled?: boolean | null;
+}): Promise<{ token: string | null; error: string | null; enabled: boolean }> {
   ensureNotificationHandler();
+  const ask = opts?.ask === true;
+  const localPref = opts?.enabled ?? (await readLocalPushPref());
+  const enabled = localPref !== false;
+
+  if (!enabled) {
+    return { token: null, error: null, enabled: false };
+  }
 
   if (!Device.isDevice) {
-    return { token: null, error: 'Push requires a physical device' };
+    return { token: null, error: 'Push requires a physical device', enabled };
   }
 
   try {
     await ensureChannels();
-
     const current = await Notifications.getPermissionsAsync();
     let status = current.status;
-    if (status !== 'granted') {
+
+    if (status !== 'granted' && (ask || status === 'undetermined')) {
       const asked = await Notifications.requestPermissionsAsync();
       status = asked.status;
     }
+
     if (status !== 'granted') {
-      return { token: null, error: 'Notification permission denied' };
+      return {
+        token: null,
+        error: ask ? 'Notification permission denied' : null,
+        enabled,
+      };
     }
 
-    const devicePush = await Notifications.getDevicePushTokenAsync();
-    const token = devicePush.data;
-    if (!token || typeof token !== 'string') {
-      return { token: null, error: 'No device push token returned' };
-    }
-
-    const { error } = await supabase.rpc('upsert_push_token', {
-      p_token: token,
-      p_platform: resolvePlatform(),
-    });
-    if (error) return { token: null, error: error.message };
-
-    // Local tray notification for unread welcome (FCM may also fire from DB)
+    const saved = await upsertCurrentToken();
+    await writeLocalPushPref(true);
     await presentWelcomePushIfNeeded();
-
-    return { token, error: null };
+    return { ...saved, enabled: true };
   } catch (err) {
     const message =
       err instanceof Error
@@ -144,8 +186,23 @@ export async function registerForPushNotifications(): Promise<{
       return {
         token: null,
         error: 'Push needs a development or preview build (not Expo Go)',
+        enabled,
       };
     }
-    return { token: null, error: message };
+    return { token: null, error: message, enabled };
   }
+}
+
+/** @deprecated use syncPushRegistration — kept for older call sites */
+export async function registerForPushNotifications() {
+  return syncPushRegistration({ ask: true });
+}
+
+export async function setPushEnabled(enabled: boolean): Promise<{ error: string | null }> {
+  await writeLocalPushPref(enabled);
+  const { error } = await supabase.rpc('set_push_preference', { p_enabled: enabled });
+  if (error) return { error: error.message };
+  if (!enabled) return { error: null };
+  const result = await syncPushRegistration({ ask: true, enabled: true });
+  return { error: result.error };
 }

@@ -3,6 +3,8 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { appConfirm } from '@/components/AppDialog';
+
 
 async function loadVerified(): Promise<boolean> {
   const supabase = createClient();
@@ -26,7 +28,7 @@ export function SupportReply({ threadId }: { threadId: string }) {
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!verified) {
-      const ok = confirm(
+      const ok = await appConfirm(
         'Warning: your admin account is not blue-verified. The user will see a warning on this message. Continue?',
       );
       if (!ok) return;

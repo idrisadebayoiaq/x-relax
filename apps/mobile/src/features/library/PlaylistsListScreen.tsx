@@ -1,7 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   Modal,
   Platform,
@@ -11,6 +10,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -26,6 +26,8 @@ import { loadSuggestedPlaylists } from '../../lib/playlistSuggestions';
 import { loadCachedLibrarySnapshot } from '../../lib/offlineCache';
 import type { Playlist } from '../../types/database';
 import type { RootStackParamList } from '../../navigation/types';
+import { appAlert } from '../../ui/appAlert';
+
 
 type SortMode = 'recent' | 'alpha' | 'discover';
 
@@ -110,11 +112,11 @@ export function PlaylistsListScreen() {
 
   const createPlaylist = async () => {
     if (!online) {
-      Alert.alert('Offline', 'Connect to the internet to create a playlist.');
+      appAlert('Offline', 'Connect to the internet to create a playlist.');
       return;
     }
     if (!user || !title.trim()) {
-      Alert.alert('Name required', 'Give your playlist a name.');
+      appAlert('Name required', 'Give your playlist a name.');
       return;
     }
     setCreating(true);
@@ -129,7 +131,7 @@ export function PlaylistsListScreen() {
       .single();
     setCreating(false);
     if (error) {
-      Alert.alert('Could not create playlist', error.message);
+      appAlert('Could not create playlist', error.message);
       return;
     }
     setTitle('');

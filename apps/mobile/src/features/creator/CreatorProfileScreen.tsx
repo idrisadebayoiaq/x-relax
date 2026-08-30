@@ -1,13 +1,13 @@
 import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   RefreshControl,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
@@ -25,6 +25,8 @@ import type { Sound } from '../../types/database';
 import { EmptyBlock, PrimaryButton, ScreenScaffold, SectionLabel } from '../../ui/Screen';
 import { SoundCard } from '../../ui/Cards';
 import { VerifiedBadge } from '../../ui/VerifiedBadge';
+import { appAlert } from '../../ui/appAlert';
+
 
 type CreatorPublicProfile = {
   id: string;
@@ -118,7 +120,7 @@ export function CreatorProfileScreen() {
 
   const toggleFollow = async () => {
     if (!user) {
-      Alert.alert('Sign in', 'Sign in to follow creators.');
+      appAlert('Sign in', 'Sign in to follow creators.');
       return;
     }
     if (isOwnProfile) return;
@@ -131,13 +133,13 @@ export function CreatorProfileScreen() {
         .delete()
         .eq('follower_id', user.id)
         .eq('creator_id', creatorId);
-      if (error) Alert.alert('Unfollow failed', error.message);
+      if (error) appAlert('Unfollow failed', error.message);
     } else {
       const { error } = await supabase.from('creator_follows').insert({
         follower_id: user.id,
         creator_id: creatorId,
       });
-      if (error) Alert.alert('Follow failed', error.message);
+      if (error) appAlert('Follow failed', error.message);
     }
     setFollowBusy(false);
     await load();
@@ -158,7 +160,7 @@ export function CreatorProfileScreen() {
     const body = await readImageBody(result.assets[0].uri);
     if (!body?.byteLength) {
       setBannerBusy(false);
-      Alert.alert('Upload failed', 'Could not read the selected image.');
+      appAlert('Upload failed', 'Could not read the selected image.');
       return;
     }
 
@@ -167,7 +169,7 @@ export function CreatorProfileScreen() {
       .upload(path, body, { upsert: true, contentType: 'image/jpeg', cacheControl: '3600' });
     if (uploadError) {
       setBannerBusy(false);
-      Alert.alert('Upload failed', uploadError.message);
+      appAlert('Upload failed', uploadError.message);
       return;
     }
 
@@ -181,7 +183,7 @@ export function CreatorProfileScreen() {
 
     setBannerBusy(false);
     if (updateError) {
-      Alert.alert('Save failed', updateError.message);
+      appAlert('Save failed', updateError.message);
       return;
     }
     await load();

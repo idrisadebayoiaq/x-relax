@@ -50,7 +50,7 @@ function updateLockScreen(layers: MixLayer[], title: string) {
       true,
       {
         title,
-        artist: `${layers.length} sound${layers.length === 1 ? '' : 's'} · X-Relax Mix`,
+        artist: `${title} · X-Relax Mix`,
         albumTitle: 'Mix Studio',
         artworkUrl: first.sound.cover_url ?? undefined,
       },

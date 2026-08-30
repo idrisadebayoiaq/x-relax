@@ -6,6 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/auth-context';
 import { paymentMethodForCountry } from '@/lib/countries';
+import { fetchPremiumAccess, formatPremiumCoverage } from '@/lib/premium-access';
 import type { PaymentMethod, SubscriptionPlan } from '@/types/database';
 
 type MethodInfo = {
@@ -30,6 +31,7 @@ export default function CheckoutPage() {
   const [proof, setProof] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [blockedReason, setBlockedReason] = useState<string | null>(null);
 
   useEffect(() => {
     setMethod(allowedMethod);
@@ -40,14 +42,23 @@ export default function CheckoutPage() {
     Promise.all([
       supabase.from('subscription_plans').select('*').eq('id', params.planId).maybeSingle(),
       supabase.from('app_settings').select('value').eq('key', 'payment_methods').maybeSingle(),
-    ]).then(([{ data: planRow }, { data: settings }]) => {
-      setPlan(planRow as SubscriptionPlan | null);
+    ]).then(async ([{ data: planRow }, { data: settings }]) => {
+      const nextPlan = planRow as SubscriptionPlan | null;
+      setPlan(nextPlan);
       setMethods((settings?.value as Record<string, MethodInfo>) ?? {});
+      if (nextPlan && nextPlan.code !== 'creator_blue_badge') {
+        const access = await fetchPremiumAccess();
+        if (!access.canPurchase) setBlockedReason(formatPremiumCoverage(access));
+      }
     });
   }, [params.planId]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (blockedReason) {
+      setError(blockedReason);
+      return;
+    }
     if (!user || !plan || !proof) {
       setError('Upload a payment proof screenshot.');
       return;
@@ -74,7 +85,12 @@ export default function CheckoutPage() {
 
     if (payError || !payment) {
       setBusy(false);
-      setError(payError?.message ?? 'Could not create payment');
+      const denied = /row-level security|violates/i.test(payError?.message ?? '');
+      setError(
+        denied
+          ? 'You already have Premium or a payment waiting for approval.'
+          : (payError?.message ?? 'Could not create payment'),
+      );
       return;
     }
 
@@ -120,6 +136,13 @@ export default function CheckoutPage() {
         ← Back
       </Link>
       <h1 className="text-3xl font-serif font-bold">{plan.name}</h1>
+      {blockedReason ? (
+        <div className="card p-6 space-y-2">
+          <p className="font-semibold">Plans are closed</p>
+          <p className="text-sm text-muted">{blockedReason}</p>
+          <Link href="/premium/payments" className="chip inline-flex">My payment requests</Link>
+        </div>
+      ) : (
       <form onSubmit={submit} className="card p-6 space-y-4">
         {error ? <p className="text-sm text-red-600">{error}</p> : null}
         {!profile?.country_code ? (
@@ -165,6 +188,7 @@ export default function CheckoutPage() {
           {busy ? 'Submitting…' : 'Submit payment proof'}
         </button>
       </form>
+      )}
     </div>
   );
 }

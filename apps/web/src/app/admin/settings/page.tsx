@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/auth-context';
 import type { SubscriptionPlan } from '@/types/database';
+import { appAlert } from '@/components/AppDialog';
 
 export default function AdminSettingsPage() {
   const { isAdmin } = useAuth();
@@ -35,10 +36,10 @@ export default function AdminSettingsPage() {
         value: parsed,
         updated_at: new Date().toISOString(),
       });
-      if (error) alert(error.message);
-      else alert(`Saved ${key}`);
+      if (error) appAlert(error.message);
+      else appAlert(`Saved ${key}`);
     } catch {
-      alert('Invalid JSON');
+      appAlert('Invalid JSON');
     }
   };
 
@@ -52,8 +53,8 @@ export default function AdminSettingsPage() {
         is_active: plan.is_active,
       })
       .eq('id', plan.id);
-    if (error) alert(error.message);
-    else alert('Plan saved');
+    if (error) appAlert(error.message);
+    else appAlert('Plan saved');
   };
 
   if (!isAdmin) return null;

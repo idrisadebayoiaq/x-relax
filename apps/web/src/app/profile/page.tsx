@@ -24,6 +24,8 @@ import { VerifiedBadge } from '@/components/VerifiedBadge';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/auth-context';
 import { COUNTRIES } from '@/lib/countries';
+import { appAlert, appConfirm } from '@/components/AppDialog';
+
 
 const ACCENT = 'var(--accent)';
 const ACCENT_SOFT = 'var(--accent-soft)';
@@ -168,7 +170,7 @@ export default function ProfilePage() {
 
   const save = async () => {
     if (!countryCode) {
-      alert('Please select your country.');
+      appAlert('Please select your country.');
       return;
     }
     setBusy(true);
@@ -182,7 +184,7 @@ export default function ProfilePage() {
     });
     setBusy(false);
     if (error) {
-      alert(error);
+      appAlert(error);
       return;
     }
     setAvatarFile(null);
@@ -405,7 +407,7 @@ export default function ProfilePage() {
         type="button"
         className="w-full rounded-xl border border-red-500 text-red-500 py-3.5 font-semibold inline-flex items-center justify-center gap-2"
         onClick={() => {
-          if (confirm('Sign out of X-Relax?')) void signOut();
+          if (await appConfirm('Sign out of X-Relax?')) void signOut();
         }}
       >
         <LogOut size={18} />
@@ -523,7 +525,7 @@ export default function ProfilePage() {
                 disabled={!apkUrl}
                 onClick={async () => {
                   await navigator.clipboard.writeText(apkUrl);
-                  alert('Link copied — paste it to WhatsApp Status or anywhere.');
+                  appAlert('Link copied — paste it to WhatsApp Status or anywhere.');
                 }}
               >
                 Copy link
@@ -581,7 +583,7 @@ export default function ProfilePage() {
                     });
                   } else {
                     void navigator.clipboard.writeText(apkUrl);
-                    alert('Link copied');
+                    appAlert('Link copied');
                   }
                 }}
               >

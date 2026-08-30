@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -13,6 +13,11 @@ import { useAppTheme } from '../../lib/useAppTheme';
 import { useAuth } from '../auth/AuthProvider';
 import { supabase } from '../../lib/supabase';
 import { FREE_DAILY_SOUND_LIMIT } from '../../lib/dailyListenLimit';
+import {
+  fetchPremiumAccess,
+  formatPremiumCoverage,
+  type PremiumAccess,
+} from '../../lib/premiumAccess';
 import type { SubscriptionPlan } from '../../types/database';
 import type { RootStackParamList } from '../../navigation/types';
 import {
@@ -23,18 +28,19 @@ import {
 
 export function PremiumScreen() {
   const { colors } = useAppTheme();
-  const { isPremium, isAdmin, refreshProfile, profile } = useAuth();
+  const { isPremium, isAdmin, refreshProfile } = useAuth();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
+  const [access, setAccess] = useState<PremiumAccess | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
-    const { data: planRows } = await supabase
-      .from('subscription_plans')
-      .select('*')
-      .eq('is_active', true)
-      .order('sort_order');
+    const [{ data: planRows }, nextAccess] = await Promise.all([
+      supabase.from('subscription_plans').select('*').eq('is_active', true).order('sort_order'),
+      fetchPremiumAccess(),
+    ]);
     setPlans(((planRows as SubscriptionPlan[]) ?? []).filter((p) => p.code !== 'creator_blue_badge'));
+    setAccess(nextAccess);
     setLoading(false);
   }, []);
 
@@ -58,26 +64,32 @@ export function PremiumScreen() {
       title="Premium"
       onBack={() => navigation.goBack()}
       subtitle={
-        isPremium
-          ? `You’re on ${profile?.premium_status ?? 'Premium'} · unlimited calm.`
-          : 'Unlock unlimited listening, sleep timer, downloads, and more.'
+        access
+          ? formatPremiumCoverage(access)
+          : isPremium
+            ? 'You’re on Premium · unlimited calm.'
+            : 'Unlock unlimited listening, sleep timer, downloads, and more.'
       }
     >
       <View style={styles.heroWrap}>
         <LinearGradient colors={['#061428', '#0B3D91', '#F5C400']} style={styles.hero}>
-          <Text style={styles.heroEyebrow}>{isPremium ? 'Active' : 'Upgrade'}</Text>
+          <Text style={styles.heroEyebrow}>
+            {access?.isLifetime ? 'Lifetime' : access?.isPremium ? 'Active' : 'Upgrade'}
+          </Text>
           <Text style={styles.heroTitle}>
-            {isPremium ? 'Premium calm' : 'Go deeper'}
+            {access?.isPremium ? 'Premium calm' : 'Go deeper'}
           </Text>
           <Text style={styles.heroBody}>
-            {isPremium
-              ? 'Unlimited sounds, sleep timer, downloads, and Mix Studio are yours.'
-              : `Free accounts unlock ${FREE_DAILY_SOUND_LIMIT} sounds per day (replay those freely). Premium removes the limit and adds sleep timer, downloads, and Mix Studio.`}
+            {access?.isLifetime
+              ? 'Lifetime is approved. You will not see payment plans again.'
+              : access?.isPremium
+                ? formatPremiumCoverage(access)
+                : `Free accounts unlock ${FREE_DAILY_SOUND_LIMIT} sounds per day (replay those freely). Premium removes the limit and adds sleep timer, downloads, and Mix Studio.`}
           </Text>
         </LinearGradient>
       </View>
 
-      {!isPremium ? (
+      {!access?.isPremium ? (
         <View style={[styles.freeCard, { borderColor: colors.border }]}>
           <Text style={[styles.freeTitle, { color: colors.text }]}>Free plan</Text>
           <Text style={[styles.freeBody, { color: colors.textMuted }]}>
@@ -86,23 +98,36 @@ export function PremiumScreen() {
         </View>
       ) : null}
 
-      <SectionLabel>Plans</SectionLabel>
-      {plans.map((plan) => (
-        <Pressable
-          key={plan.id}
-          style={[styles.plan, { borderColor: colors.border }]}
-          onPress={() => navigation.navigate('PaymentCheckout', { planId: plan.id })}
-        >
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.planName, { color: colors.text }]}>{plan.name}</Text>
-            <Text style={[styles.planMeta, { color: colors.textMuted }]}>
-              ${Number(plan.price_usd).toFixed(2)} · ₦{Number(plan.price_ngn).toLocaleString()}
-              {plan.duration_days == null ? ' · Lifetime' : ` · ${plan.duration_days} days`}
-            </Text>
-          </View>
-          <Text style={{ color: colors.textMuted, fontSize: 18 }}>›</Text>
-        </Pressable>
-      ))}
+      {access && !access.canPurchase ? (
+        <View style={[styles.freeCard, { borderColor: colors.border, backgroundColor: colors.accentSoft }]}>
+          <Text style={[styles.freeTitle, { color: colors.text }]}>
+            {access.isLifetime ? 'Payment plans closed' : access.pendingPayment ? 'Request already sent' : 'Plan already active'}
+          </Text>
+          <Text style={[styles.freeBody, { color: colors.textMuted }]}>
+            {formatPremiumCoverage(access)}
+          </Text>
+        </View>
+      ) : (
+        <>
+          <SectionLabel>Plans</SectionLabel>
+          {plans.map((plan) => (
+            <Pressable
+              key={plan.id}
+              style={[styles.plan, { borderColor: colors.border }]}
+              onPress={() => navigation.navigate('PaymentCheckout', { planId: plan.id })}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.planName, { color: colors.text }]}>{plan.name}</Text>
+                <Text style={[styles.planMeta, { color: colors.textMuted }]}>
+                  ${Number(plan.price_usd).toFixed(2)} · ₦{Number(plan.price_ngn).toLocaleString()}
+                  {plan.duration_days == null ? ' · Lifetime' : ` · ${plan.duration_days} days`}
+                </Text>
+              </View>
+              <Text style={{ color: colors.textMuted, fontSize: 18 }}>›</Text>
+            </Pressable>
+          ))}
+        </>
+      )}
 
       <SectionLabel>More</SectionLabel>
       <OutlineRow

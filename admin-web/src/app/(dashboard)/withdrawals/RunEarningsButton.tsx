@@ -2,6 +2,7 @@
 
 import { ActionButton } from '@/components/ActionButton';
 import { createClient } from '@/lib/supabase/client';
+import { appAlert } from '@/components/AppDialog';
 
 export function RunEarningsButton() {
   return (
@@ -16,7 +17,7 @@ export function RunEarningsButton() {
           p_period_start: start.toISOString().slice(0, 10),
           p_period_end: end.toISOString().slice(0, 10),
         });
-        if (error) alert(error.message);
+        if (error) appAlert(error.message);
         else {
           await supabase.rpc('log_admin_action', {
             p_action: 'calculate_earnings',
@@ -26,7 +27,7 @@ export function RunEarningsButton() {
               period_end: end.toISOString().slice(0, 10),
             },
           });
-          alert('Earnings calculated for previous month.');
+          appAlert('Earnings calculated for previous month.');
         }
       }}
     />

@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/auth-context';
 import type { PaymentStatus } from '@/types/database';
+import { appAlert, appConfirm } from '@/components/AppDialog';
 
 type PaymentDetail = {
   id: string;
@@ -74,7 +75,7 @@ export default function AdminPaymentDetailPage() {
       p_note: null,
     });
     setBusy(false);
-    if (error) alert(error.message);
+    if (error) appAlert(error.message);
     else {
       await refreshProfile();
       void load();
@@ -84,7 +85,7 @@ export default function AdminPaymentDetailPage() {
   const sendReply = async () => {
     if (!user || !reply.trim()) return;
     if (!isVerifiedAdmin) {
-      const ok = confirm(
+      const ok = await appConfirm(
         'Warning: your admin account is not blue-verified. The user will see a warning on this message. Continue?',
       );
       if (!ok) return;
@@ -95,7 +96,7 @@ export default function AdminPaymentDetailPage() {
       body: reply.trim(),
       sender_verified: isVerifiedAdmin,
     });
-    if (error) alert(error.message);
+    if (error) appAlert(error.message);
     else {
       setReply('');
       void load();

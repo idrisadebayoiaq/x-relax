@@ -13,7 +13,10 @@ import {
   type AudioPlayer,
   type AudioStatus,
 } from 'expo-audio';
-import { Alert, AppState, type AppStateStatus } from 'react-native';
+import {
+  AppState,
+  type AppStateStatus,
+} from 'react-native';
 import { supabase } from '../../lib/supabase';
 import {
   claimDailySoundPlay,
@@ -23,6 +26,7 @@ import {
 } from '../../lib/dailyListenLimit';
 import { stopExternalMixPlayback } from '../../lib/mixPlayback';
 import { claimExclusiveAudioFocus } from '../../lib/audioSession';
+import { releaseAudioPlayer } from '../../lib/releaseAudioPlayer';
 import {
   clearPlaybackSession,
   loadPlaybackSession,
@@ -32,6 +36,7 @@ import { resolvePlayableUrl } from '../../lib/downloads';
 import { isDeviceOnline, loadAppSettings } from '../../lib/appSettings';
 import { useAuth } from '../auth/AuthProvider';
 import type { Sound } from '../../types/database';
+import { appAlert } from '../../ui/appAlert';
 
 export type PlaySoundOptions = {
   queue?: Sound[];
@@ -59,6 +64,10 @@ type PlayerContextValue = {
   playPrevious: () => Promise<boolean>;
   stopPlayback: () => Promise<void>;
   dismissMiniPlayer: () => Promise<void>;
+  isMiniPlayerMinimized: boolean;
+  minimizeMiniPlayer: () => void;
+  expandMiniPlayer: () => void;
+  toggleMiniPlayerMinimized: () => void;
   togglePlay: () => Promise<void>;
   seekBy: (deltaMs: number) => Promise<void>;
   seekTo: (positionMs: number) => Promise<void>;
@@ -95,6 +104,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [queue, setQueue] = useState<Sound[]>([]);
   const [queueIndex, setQueueIndex] = useState(0);
   const [queueLabel, setQueueLabel] = useState<string | null>(null);
+  const [isMiniPlayerMinimized, setIsMiniPlayerMinimized] = useState(false);
   const lastHistoryWrite = useRef(0);
   const currentRef = useRef<Sound | null>(null);
   const queueRef = useRef<Sound[]>([]);
@@ -110,6 +120,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const sleepLoopRef = useRef(false);
   const positionMsRef = useRef(0);
   const restoringRef = useRef(false);
+  const playbackGenerationRef = useRef(0);
+  const ownedPlayersRef = useRef<Set<AudioPlayer>>(new Set());
   currentRef.current = current;
   sleepEndsAtRef.current = sleepEndsAt;
   queueRef.current = queue;
@@ -239,9 +251,30 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     [user],
   );
 
+  const releaseAllPlayers = useCallback(() => {
+    playbackGenerationRef.current += 1;
+    const sub = statusSubRef.current;
+    statusSubRef.current = null;
+    const active = soundRef.current;
+    soundRef.current = null;
+    releaseAudioPlayer(active, sub);
+    for (const player of ownedPlayersRef.current) {
+      if (player !== active) releaseAudioPlayer(player);
+    }
+    ownedPlayersRef.current.clear();
+    currentRef.current = null;
+    setCurrent(null);
+    setIsPlaying(false);
+    setPositionMs(0);
+    setDurationMs(0);
+    positionMsRef.current = 0;
+  }, []);
+
   const onPlaybackStatus = useCallback(
-    (status: AudioStatus) => {
+    (status: AudioStatus, generation: number) => {
+      if (generation !== playbackGenerationRef.current) return;
       if (!status.isLoaded) return;
+      if (!soundRef.current) return;
       const posSec = status.currentTime ?? 0;
       setPositionMs(posSec * 1000);
       setDurationMs((status.duration ?? 0) * 1000);
@@ -288,25 +321,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   const unload = useCallback(async () => {
     flushPlayCount();
-    statusSubRef.current?.remove();
-    statusSubRef.current = null;
-    if (soundRef.current) {
-      try {
-        soundRef.current.clearLockScreenControls();
-        soundRef.current.pause();
-        soundRef.current.remove();
-      } catch {
-        /* ignore */
-      }
-      soundRef.current = null;
-    }
-    setCurrent(null);
-    setIsPlaying(false);
-    setPositionMs(0);
-    setDurationMs(0);
-  }, [flushPlayCount]);
+    releaseAllPlayers();
+  }, [flushPlayCount, releaseAllPlayers]);
 
   const stopPlayback = useCallback(async () => {
+    stopExternalMixPlayback();
     await unload();
     setQueue([]);
     setQueueIndex(0);
@@ -318,8 +337,22 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }, [unload]);
 
   const dismissMiniPlayer = useCallback(async () => {
+    setIsMiniPlayerMinimized(false);
+    stopExternalMixPlayback();
     await stopPlayback();
   }, [stopPlayback]);
+
+  const minimizeMiniPlayer = useCallback(() => {
+    setIsMiniPlayerMinimized(true);
+  }, []);
+
+  const expandMiniPlayer = useCallback(() => {
+    setIsMiniPlayerMinimized(false);
+  }, []);
+
+  const toggleMiniPlayerMinimized = useCallback(() => {
+    setIsMiniPlayerMinimized((v) => !v);
+  }, []);
 
   const loadSound = useCallback(
     async (
@@ -336,6 +369,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       playCountedRef.current = false;
       lastPosSecRef.current = 0;
       lastStatusAtRef.current = Date.now();
+
+      const generation = playbackGenerationRef.current;
 
       setQueue(nextQueue);
       setQueueIndex(index);
@@ -367,9 +402,13 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       }
       statusSubRef.current = player.addListener(
         'playbackStatusUpdate',
-        onPlaybackStatus,
+        (status) => onPlaybackStatus(status, generation),
       );
 
+      ownedPlayersRef.current.add(player);
+      soundRef.current = player;
+      currentRef.current = sound;
+      setCurrent(sound);
       const album =
         (nextQueueLabel !== undefined ? nextQueueLabel : queueLabelRef.current) || 'X-Relax';
       // Activates Android media notification + lock-screen controls (keeps audio alive while locked).
@@ -387,8 +426,6 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         },
       );
 
-      soundRef.current = player;
-      setCurrent(sound);
       setPositionMs(startMs);
       positionMsRef.current = startMs;
 
@@ -440,10 +477,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   const playSound = useCallback(
     async (sound: Sound, options?: PlaySoundOptions): Promise<boolean> => {
+      setIsMiniPlayerMinimized(false);
       const uri = await resolvePlayableUrl(sound);
       if (!uri) {
         const online = await isDeviceOnline();
-        Alert.alert(
+        appAlert(
           online ? 'Unavailable' : 'Offline',
           online
             ? 'This sound has no audio file.'
@@ -463,7 +501,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       if (!skipDailyClaim && online) {
         const claim = await claimDailySoundPlay(userId, sound.id, hasUnlimitedListening);
         if (!claim.allowed) {
-          Alert.alert('Daily limit reached', DAILY_LIMIT_MESSAGE);
+          appAlert('Daily limit reached', DAILY_LIMIT_MESSAGE);
           return false;
         }
       }
@@ -482,7 +520,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
       if (!playableQueue.some((item) => item.id === sound.id)) {
         if (!skipDailyClaim && online) {
-          Alert.alert('Daily limit reached', DAILY_LIMIT_MESSAGE);
+          appAlert('Daily limit reached', DAILY_LIMIT_MESSAGE);
           return false;
         }
       }
@@ -700,6 +738,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       playPrevious,
       stopPlayback,
       dismissMiniPlayer,
+      isMiniPlayerMinimized,
+      minimizeMiniPlayer,
+      expandMiniPlayer,
+      toggleMiniPlayerMinimized,
       togglePlay,
       seekBy,
       seekTo,
@@ -725,6 +767,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       playPrevious,
       stopPlayback,
       dismissMiniPlayer,
+      isMiniPlayerMinimized,
+      minimizeMiniPlayer,
+      expandMiniPlayer,
+      toggleMiniPlayerMinimized,
       togglePlay,
       seekBy,
       seekTo,

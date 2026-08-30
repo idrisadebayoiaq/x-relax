@@ -10,6 +10,8 @@ import { useAuth } from '@/lib/auth-context';
 import { usePlayer } from '@/lib/player-context';
 import { useOffline } from '@/components/OfflineProvider';
 import type { Playlist, Sound } from '@/types/database';
+import { appAlert, appConfirm } from '@/components/AppDialog';
+import { deleteDownload, removeFavorite } from '@/lib/library-actions';
 
 type SortMode = 'recent' | 'alpha' | 'discover';
 
@@ -125,7 +127,7 @@ export default function LibraryPage() {
       .single();
     setCreating(false);
     if (error) {
-      alert(error.message);
+      appAlert(error.message);
       return;
     }
     setNewTitle('');
@@ -356,10 +358,10 @@ export default function LibraryPage() {
       </div>
       <ul className="divide-y divide-border">
         {list.map((sound) => (
-          <li key={sound.id}>
+          <li key={sound.id} className="flex items-center gap-2">
             <button
               type="button"
-              className="w-full flex items-center gap-3.5 py-3 text-left"
+              className="flex-1 flex items-center gap-3.5 py-3 text-left"
               onClick={() => {
                 void (async () => {
                   const index = list.findIndex((s) => s.id === sound.id);
@@ -377,6 +379,25 @@ export default function LibraryPage() {
                 <span className="block text-[16px] truncate">{sound.title}</span>
               </span>
             </button>
+            {user ? (
+              <button
+                type="button"
+                className="chip text-xs"
+                onClick={async () => {
+                  const label =
+                    section === 'favourites' ? 'Remove favourite' : 'Delete download';
+                  if (!(await appConfirm(label, `Remove "${sound.title}"?`))) return;
+                  const { error } =
+                    section === 'favourites'
+                      ? await removeFavorite(user.id, sound.id)
+                      : await deleteDownload(user.id, sound.id);
+                  if (error) appAlert('Could not remove', error);
+                  else void load();
+                }}
+              >
+                Remove
+              </button>
+            ) : null}
           </li>
         ))}
         {!list.length ? (

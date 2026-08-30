@@ -12,6 +12,8 @@ web-build/
 .env.*.local
 
 # Native
+android/
+ios/
 *.jks
 *.p8
 *.p12

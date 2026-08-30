@@ -2,6 +2,7 @@
 
 import { ActionButton } from '@/components/ActionButton';
 import { createClient } from '@/lib/supabase/client';
+import { appAlert } from '@/components/AppDialog';
 
 export function ReportActions({ id }: { id: string }) {
   const resolve = async (status: string) => {
@@ -11,7 +12,7 @@ export function ReportActions({ id }: { id: string }) {
       p_status: status,
       p_admin_note: null,
     });
-    if (error) alert(error.message);
+    if (error) appAlert(error.message);
   };
 
   return (

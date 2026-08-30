@@ -14,7 +14,9 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../lib/useAppTheme';
 import { supabase } from '../../lib/supabase';
-import { registerForPushNotifications } from '../../lib/push';
+import { setPushEnabled } from '../../lib/push';
+import { useAuth } from '../auth/AuthProvider';
+import { appAlert } from '../../ui/appAlert';
 import type { RootStackParamList } from '../../navigation/types';
 import { EmptyBlock } from '../../ui/Screen';
 import { IconButton } from '../../ui/Icon';
@@ -32,9 +34,11 @@ export function NotificationsScreen() {
   const { colors, isDark } = useAppTheme();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const { profile, refreshProfile } = useAuth();
   const [items, setItems] = useState<NotificationRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [pushMsg, setPushMsg] = useState<string | null>(null);
+  const [pushOn, setPushOn] = useState(profile?.push_enabled !== false);
+  const [pushBusy, setPushBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -51,6 +55,10 @@ export function NotificationsScreen() {
     load();
   }, [load]);
 
+  useEffect(() => {
+    setPushOn(profile?.push_enabled !== false);
+  }, [profile?.push_enabled]);
+
   const markRead = async (id: string) => {
     await supabase
       .from('notifications')
@@ -62,10 +70,18 @@ export function NotificationsScreen() {
     );
   };
 
-  const onEnablePush = async () => {
-    setPushMsg(null);
-    const result = await registerForPushNotifications();
-    setPushMsg(result.error ?? 'Push enabled for this device');
+  const onTogglePush = async () => {
+    const next = !pushOn;
+    setPushOn(next);
+    setPushBusy(true);
+    const { error } = await setPushEnabled(next);
+    setPushBusy(false);
+    if (error) {
+      setPushOn(!next);
+      appAlert('Notifications', error);
+      return;
+    }
+    await refreshProfile();
   };
 
   return (
@@ -87,17 +103,25 @@ export function NotificationsScreen() {
           Welcome notes, payments, and creator updates
         </Text>
         <Pressable
-          style={[styles.pushBtn, { borderColor: colors.border }]}
-          onPress={onEnablePush}
+          style={[styles.pushBtn, { borderColor: colors.border, opacity: pushBusy ? 0.7 : 1 }]}
+          disabled={pushBusy}
+          onPress={() => void onTogglePush()}
         >
-          <Ionicons name="notifications-outline" size={18} color={colors.text} />
-          <Text style={{ color: colors.text, fontFamily: 'DMSans_700Bold', fontSize: 14 }}>
-            Enable push on this device
+          <Ionicons
+            name={pushOn ? 'notifications' : 'notifications-off-outline'}
+            size={18}
+            color={pushOn ? colors.accent : colors.text}
+          />
+          <Text style={{ color: colors.text, fontFamily: 'DMSans_700Bold', fontSize: 14, flex: 1 }}>
+            {pushOn ? 'Push notifications on' : 'Push notifications off'}
+          </Text>
+          <Text style={{ color: colors.textMuted, fontFamily: 'DMSans_400Regular', fontSize: 12 }}>
+            {pushOn ? 'Tap to turn off' : 'Tap to turn on'}
           </Text>
         </Pressable>
-        {pushMsg ? (
-          <Text style={[styles.hint, { color: colors.textMuted }]}>{pushMsg}</Text>
-        ) : null}
+        <Text style={[styles.hint, { color: colors.textMuted }]}>
+          Once enabled, alerts stay on until you turn them off here or in Settings.
+        </Text>
       </View>
 
       {loading ? (

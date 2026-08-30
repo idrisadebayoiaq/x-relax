@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/auth-context';
+import { appAlert } from '@/components/AppDialog';
 
 type Row = {
   id: string;
@@ -41,7 +42,7 @@ export default function AdminWithdrawalsPage() {
       p_status: status,
       p_admin_note: null,
     });
-    if (error) alert(error.message);
+    if (error) appAlert(error.message);
     else void load();
   };
 
@@ -55,8 +56,8 @@ export default function AdminWithdrawalsPage() {
       p_period_end: end.toISOString().slice(0, 10),
     });
     setEarningsBusy(false);
-    if (error) alert(error.message);
-    else alert('Earnings calculation finished.');
+    if (error) appAlert(error.message);
+    else appAlert('Earnings calculation finished.');
   };
 
   if (!isAdmin) return null;

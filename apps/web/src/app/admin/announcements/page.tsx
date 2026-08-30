@@ -3,6 +3,7 @@
 import { FormEvent, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/auth-context';
+import { appConfirm } from '@/components/AppDialog';
 
 const AUDIENCES = [
   { value: 'all', label: 'Everyone' },
@@ -24,7 +25,7 @@ export default function AdminAnnouncementsPage() {
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!isVerifiedAdmin) {
-      const ok = confirm(
+      const ok = await appConfirm(
         'Warning: your admin account is not blue-verified. Recipients will see a warning that this announcement is from an unverified admin. Continue?',
       );
       if (!ok) return;

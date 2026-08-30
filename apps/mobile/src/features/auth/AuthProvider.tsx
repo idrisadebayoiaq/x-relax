@@ -10,7 +10,13 @@ import {
 import { AppState, type AppStateStatus } from 'react-native';
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../../lib/supabase';
-import { presentWelcomePushIfNeeded, registerForPushNotifications } from '../../lib/push';
+import {
+  consumePushAsk,
+  markPushAskOnNextSync,
+  presentWelcomePushIfNeeded,
+  syncPushRegistration,
+  writeLocalPushPref,
+} from '../../lib/push';
 import {
   cacheProfileSnapshot,
   clearOfflineUserCache,
@@ -45,6 +51,7 @@ type AuthContextValue = {
     displayName: string;
     role: SignupRole;
     countryCode: string;
+    enablePush?: boolean;
   }) => Promise<{ error: string | null }>;
   signIn: (input: {
     email: string;
@@ -126,6 +133,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (cached.profile) {
           setProfile(cached.profile);
           setIsPremium(cached.isPremium);
+          const enabled = cached.profile.push_enabled !== false;
+          void syncPushRegistration({
+            ask: consumePushAsk(),
+            enabled,
+          }).then((result) => {
+            if (result.error) console.warn('Push registration:', result.error);
+          });
           return;
         }
       }
@@ -147,7 +161,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const requirePremium = (flags?.value as any)?.mixes_require_premium;
       setMixesRequirePremium(requirePremium !== false);
 
-      registerForPushNotifications().then(async (result) => {
+      const enabled = nextProfile?.push_enabled !== false;
+      void syncPushRegistration({
+        ask: consumePushAsk(),
+        enabled,
+      }).then(async (result) => {
         if (result.error) {
           console.warn('Push registration:', result.error);
           await presentWelcomePushIfNeeded();
@@ -159,6 +177,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (cached.profile) {
         setProfile(cached.profile);
         setIsPremium(cached.isPremium);
+        void syncPushRegistration({
+          ask: consumePushAsk(),
+          enabled: cached.profile.push_enabled !== false,
+        });
       }
     }
   }, []);
@@ -206,6 +228,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!uid) return;
       void fetchProfile(uid).then((next) => {
         if (next) setProfile(next);
+        void syncPushRegistration({
+          ask: false,
+          enabled: next?.push_enabled !== false,
+        });
       });
     };
     const sub = AppState.addEventListener('change', onChange);
@@ -219,16 +245,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       displayName,
       role,
       countryCode,
+      enablePush = true,
     }: {
       email: string;
       password: string;
       displayName: string;
       role: SignupRole;
       countryCode: string;
+      enablePush?: boolean;
     }) => {
       const code = countryCode.trim().toUpperCase();
       if (!code) return { error: 'Country is required' };
       const safeRole: SignupRole = role === 'creator' ? 'creator' : 'listener';
+      await writeLocalPushPref(enablePush);
+      if (enablePush) markPushAskOnNextSync();
       const { error } = await supabase.auth.signUp({
         email: email.trim(),
         password,
@@ -237,9 +267,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             display_name: displayName.trim(),
             role: safeRole,
             country_code: code,
+            push_enabled: enablePush,
           },
         },
       });
+      if (!error) {
+        const { error: prefError } = await supabase.rpc('set_push_preference', {
+          p_enabled: enablePush,
+        });
+        if (prefError) console.warn('set_push_preference', prefError.message);
+      }
       return { error: error?.message ?? null };
     },
     [],

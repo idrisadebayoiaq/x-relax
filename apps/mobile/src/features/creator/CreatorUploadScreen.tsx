@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import {
-  Alert,
   Pressable,
   StyleSheet,
   Text,
@@ -16,6 +15,7 @@ import { useAuth } from '../auth/AuthProvider';
 import { supabase } from '../../lib/supabase';
 import type { Category } from '../../types/database';
 import { PrimaryButton, ScreenScaffold, SectionLabel } from '../../ui/Screen';
+import { appAlert } from '../../ui/appAlert';
 
 export function CreatorUploadScreen() {
   const { colors, isDark } = useAppTheme();
@@ -56,21 +56,21 @@ export function CreatorUploadScreen() {
   const createCategory = async () => {
     const name = newCategoryName.trim();
     if (name.length < 2) {
-      Alert.alert('Name required', 'Enter at least 2 characters.');
+      appAlert('Name required', 'Enter at least 2 characters.');
       return;
     }
     setCreatingCategory(true);
     const { data, error } = await supabase.rpc('create_category', { p_name: name });
     setCreatingCategory(false);
     if (error) {
-      Alert.alert('Could not create category', error.message);
+      appAlert('Could not create category', error.message);
       return;
     }
     setNewCategoryName('');
     setShowNewCategory(false);
     await loadCategories();
     if (data?.id) setCategoryId(data.id);
-    Alert.alert('Category created', `"${name}" is now available to everyone.`);
+    appAlert('Category created', `"${name}" is now available to everyone.`);
   };
 
   const pickAudio = async () => {
@@ -97,7 +97,7 @@ export function CreatorUploadScreen() {
   const submit = async () => {
     if (!user) return;
     if (!title.trim() || !audioUri || !categoryId) {
-      Alert.alert('Missing fields', 'Title, audio file, and category are required.');
+      appAlert('Missing fields', 'Title, audio file, and category are required.');
       return;
     }
     setBusy(true);
@@ -121,7 +121,7 @@ export function CreatorUploadScreen() {
 
     if (audioError) {
       setBusy(false);
-      Alert.alert('Audio upload failed', audioError.message);
+      appAlert('Audio upload failed', audioError.message);
       return;
     }
 
@@ -165,7 +165,7 @@ export function CreatorUploadScreen() {
 
     if (soundError || !sound) {
       setBusy(false);
-      Alert.alert('Save failed', soundError?.message ?? 'Unknown error');
+      appAlert('Save failed', soundError?.message ?? 'Unknown error');
       return;
     }
 
@@ -175,7 +175,7 @@ export function CreatorUploadScreen() {
     });
 
     setBusy(false);
-    Alert.alert('Published', 'Your sound is live and available in the catalog.');
+    appAlert('Published', 'Your sound is live and available in the catalog.');
     navigation.goBack();
   };
 

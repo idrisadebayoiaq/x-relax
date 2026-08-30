@@ -1,6 +1,5 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
-  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -24,17 +23,25 @@ import { ShareAppSheet } from '../../navigation/ShareAppSheet';
 import type { RootStackParamList } from '../../navigation/types';
 import type { ThemePreference } from '../../lib/theme';
 import type { AudioQuality, DownloadNetworkMode } from '../../lib/appSettings';
+import { setPushEnabled } from '../../lib/push';
+import { appAlert } from '../../ui/appAlert';
 
 export function SettingsScreen() {
   const { colors, isDark } = useAppTheme();
   const { preference, setPreference } = useTheme();
   const { settings, online, isWifi, setDownloadNetwork, setVolume, setAudioQuality } =
     useAppSettings();
-  const { signOut, isPremium, isCreator, isAdmin, user, profile } = useAuth();
+  const { signOut, isPremium, isCreator, isAdmin, user, profile, refreshProfile } = useAuth();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const insets = useSafeAreaInsets();
   const [shareOpen, setShareOpen] = useState(false);
   const [busyDelete, setBusyDelete] = useState(false);
+  const [pushOn, setPushOn] = useState(profile?.push_enabled !== false);
+  const [pushBusy, setPushBusy] = useState(false);
+
+  useEffect(() => {
+    setPushOn(profile?.push_enabled !== false);
+  }, [profile?.push_enabled]);
 
   const version =
     Constants.expoConfig?.version ??
@@ -44,7 +51,7 @@ export function SettingsScreen() {
   const cardBg = colors.elevated;
 
   const onDeleteAccount = useCallback(() => {
-    Alert.alert(
+    appAlert(
       'Delete account',
       'This permanently deletes your account and data. This cannot be undone.',
       [
@@ -53,7 +60,7 @@ export function SettingsScreen() {
           text: 'Delete',
           style: 'destructive',
           onPress: () => {
-            Alert.alert('Confirm delete', 'Are you sure you want to delete your account?', [
+            appAlert('Confirm delete', 'Are you sure you want to delete your account?', [
               { text: 'Cancel', style: 'cancel' },
               {
                 text: 'Delete forever',
@@ -64,7 +71,7 @@ export function SettingsScreen() {
                   setBusyDelete(false);
                   const payload = data as { ok?: boolean; error?: string } | null;
                   if (error || !payload?.ok) {
-                    Alert.alert(
+                    appAlert(
                       'Could not delete',
                       payload?.error ?? error?.message ?? 'Try again or contact support.',
                     );
@@ -119,6 +126,43 @@ export function SettingsScreen() {
               showDivider={idx < arr.length - 1}
             />
           ))}
+        </View>
+
+        <SectionLabel colors={colors}>Notifications</SectionLabel>
+        <View style={[styles.card, { backgroundColor: cardBg, borderColor: colors.border }]}>
+          <Pressable
+            disabled={pushBusy}
+            onPress={() => {
+              const next = !pushOn;
+              setPushOn(next);
+              setPushBusy(true);
+              void setPushEnabled(next).then(async ({ error }) => {
+                setPushBusy(false);
+                if (error) {
+                  setPushOn(!next);
+                  appAlert('Notifications', error);
+                  return;
+                }
+                await refreshProfile();
+              });
+            }}
+            style={styles.settingRow}
+          >
+            <View style={{ flex: 1, paddingRight: 12 }}>
+              <Text style={[styles.rowLabel, { color: colors.text }]}>Push notifications</Text>
+              <Text style={{ color: colors.textMuted, fontSize: 12, fontFamily: 'DMSans_400Regular', marginTop: 2 }}>
+                {pushOn ? 'On — stays on until you turn it off' : 'Off — you will not get device alerts'}
+              </Text>
+            </View>
+            <View
+              style={[
+                styles.toggle,
+                { backgroundColor: pushOn ? colors.accent : colors.border },
+              ]}
+            >
+              <View style={[styles.toggleKnob, { alignSelf: pushOn ? 'flex-end' : 'flex-start' }]} />
+            </View>
+          </Pressable>
         </View>
 
         <SectionLabel colors={colors}>Playback</SectionLabel>
@@ -185,7 +229,7 @@ export function SettingsScreen() {
           <NavRow
             icon="diamond-outline"
             label="Premium & plan"
-            hint={isPremium ? 'Premium active' : 'Upgrade or manage plan'}
+            hint={isPremium ? 'Active · plans stay closed until due' : 'Upgrade or manage plan'}
             onPress={() => navigation.navigate('Premium')}
             colors={colors}
           />
@@ -272,7 +316,7 @@ export function SettingsScreen() {
         <Pressable
           style={[styles.dangerBtn, { borderColor: colors.border, marginTop: 10 }]}
           onPress={() =>
-            Alert.alert('Sign out', 'Sign out of X-Relax?', [
+            appAlert('Sign out', 'Sign out of X-Relax?', [
               { text: 'Cancel', style: 'cancel' },
               { text: 'Sign out', style: 'destructive', onPress: () => void signOut() },
             ])
@@ -426,4 +470,17 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   dangerText: { color: '#EF4444', fontFamily: 'DMSans_700Bold', fontSize: 15 },
+  toggle: {
+    width: 42,
+    height: 24,
+    borderRadius: 12,
+    padding: 2,
+    justifyContent: 'center',
+  },
+  toggleKnob: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+  },
 });

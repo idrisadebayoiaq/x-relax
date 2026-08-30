@@ -1,13 +1,13 @@
 import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   Pressable,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -15,6 +15,8 @@ import { useAppTheme } from '../../lib/useAppTheme';
 import { useAuth } from '../auth/AuthProvider';
 import { supabase } from '../../lib/supabase';
 import { EmptyBlock } from '../../ui/Screen';
+import { appAlert } from '../../ui/appAlert';
+
 
 type Row = {
   id: string;
@@ -56,7 +58,7 @@ export function AdminWithdrawalsScreen() {
       p_status: status,
       p_admin_note: null,
     });
-    if (error) Alert.alert('Failed', error.message);
+    if (error) appAlert('Failed', error.message);
     else load();
   };
 

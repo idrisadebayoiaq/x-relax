@@ -2,6 +2,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SignInScreen } from '../features/auth/SignInScreen';
 import { SignUpScreen } from '../features/auth/SignUpScreen';
 import { ForgotPasswordScreen } from '../features/auth/ForgotPasswordScreen';
+import { LegalScreen } from '../features/home/LegalScreen';
 import { useAppTheme } from '../lib/useAppTheme';
 import type { AuthStackParamList } from './types';
 
@@ -29,6 +30,11 @@ export function AuthNavigator() {
         name="ForgotPassword"
         component={ForgotPasswordScreen}
         options={{ title: 'Reset password' }}
+      />
+      <Stack.Screen
+        name="Legal"
+        component={LegalScreen}
+        options={{ title: 'Legal' }}
       />
     </Stack.Navigator>
   );

@@ -12,6 +12,8 @@ import { AuthNavigator } from './AuthNavigator';
 import { MainTabs } from './MainTabs';
 import { MiniPlayer } from './MiniPlayer';
 import { navigationRef } from './navigationRef';
+import { getActiveRouteName } from './getActiveRouteName';
+import { useHardwareBackHandler } from './useHardwareBackHandler';
 import { PlayerScreen } from '../features/player/PlayerScreen';
 import { PlaylistDetailScreen } from '../features/library/PlaylistDetailScreen';
 import { PlaylistsListScreen } from '../features/library/PlaylistsListScreen';
@@ -47,9 +49,13 @@ import type { RootStackParamList } from './types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
+const TAB_SCREEN_NAMES = new Set(['Home', 'Search', 'Library', 'Profile']);
+
 function AppStack({ stackRoute }: { stackRoute: string | undefined }) {
   const { colors } = useAppTheme();
-  const showFloating = !!stackRoute && stackRoute !== 'Tabs' && stackRoute !== 'Player';
+  const onTabRoot =
+    stackRoute === 'Tabs' || (stackRoute != null && TAB_SCREEN_NAMES.has(stackRoute));
+  const showFloating = !!stackRoute && !onTabRoot && stackRoute !== 'Player';
 
   return (
     <View style={{ flex: 1 }}>
@@ -100,6 +106,8 @@ export function RootNavigator() {
   const { colors, isDark } = useAppTheme();
   const [stackRoute, setStackRoute] = useState<string | undefined>('Tabs');
 
+  useHardwareBackHandler();
+
   if (loading) {
     return (
       <View
@@ -132,8 +140,7 @@ export function RootNavigator() {
       ref={navigationRef}
       theme={navTheme}
       onStateChange={(state) => {
-        const stack = state?.routes[state.index ?? 0];
-        setStackRoute(stack?.name);
+        setStackRoute(getActiveRouteName(state));
       }}
     >
       {session ? <AppStack stackRoute={stackRoute} /> : <AuthNavigator />}

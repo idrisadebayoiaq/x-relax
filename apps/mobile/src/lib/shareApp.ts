@@ -1,6 +1,11 @@
-import { Alert, Linking, Platform, Share } from 'react-native';
+import {
+  Linking,
+  Platform,
+  Share,
+} from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { supabase } from './supabase';
+import { appAlert } from '../ui/appAlert';
 
 const FALLBACK_APK =
   'https://expo.dev/artifacts/eas/9ENeBOe_0pO-aHptRC6eQcr5ltQKHmyFN6XMuUHLsUA.apk';
@@ -10,7 +15,7 @@ export async function fetchAppDownloadUrl(): Promise<string> {
     .from('app_releases')
     .select('download_url, apk_path, status')
     .neq('status', 'archived')
-    .order('sort_order', { ascending: true })
+    .order('sort_order', { ascending: false })
     .order('created_at', { ascending: false })
     .limit(5);
 
@@ -31,7 +36,7 @@ export function shareAppMessage(url: string) {
 
 export async function copyAppLink(url: string) {
   await Clipboard.setStringAsync(url);
-  Alert.alert('Link copied', 'Paste it in WhatsApp Status, chats, or anywhere.');
+  appAlert('Link copied', 'Paste it in WhatsApp Status, chats, or anywhere.');
 }
 
 export async function shareAppNative(url: string) {

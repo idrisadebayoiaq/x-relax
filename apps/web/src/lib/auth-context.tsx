@@ -34,6 +34,7 @@ type AuthContextValue = {
     displayName: string;
     role: SignupRole;
     countryCode: string;
+    enablePush?: boolean;
   }) => Promise<{ error: string | null }>;
   signIn: (input: { email: string; password: string }) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
@@ -96,6 +97,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .maybeSingle();
       const limit = Number((flags?.value as { free_mix_track_limit?: number })?.free_mix_track_limit ?? 2);
       setFreeMixLimit(Number.isFinite(limit) ? limit : 2);
+
+      const enabled = (prof as Profile | null)?.push_enabled !== false;
+      const { writeLocalPushPref, requestWebPushPermission } = await import('@/lib/web-push');
+      writeLocalPushPref(enabled);
+      if (enabled) void requestWebPushPermission();
     },
     [supabase],
   );
@@ -126,15 +132,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       displayName,
       role,
       countryCode,
+      enablePush = true,
     }: {
       email: string;
       password: string;
       displayName: string;
       role: SignupRole;
       countryCode: string;
+      enablePush?: boolean;
     }) => {
       const code = countryCode.trim().toUpperCase();
       if (!code) return { error: 'Country is required' };
+      const { writeLocalPushPref, requestWebPushPermission } = await import('@/lib/web-push');
+      writeLocalPushPref(enablePush);
       const { error } = await supabase.auth.signUp({
         email: email.trim(),
         password,
@@ -143,9 +153,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             display_name: displayName.trim(),
             role: role === 'creator' ? 'creator' : 'listener',
             country_code: code,
+            push_enabled: enablePush,
           },
         },
       });
+      if (!error) {
+        const { error: prefError } = await supabase.rpc('set_push_preference', {
+          p_enabled: enablePush,
+        });
+        if (prefError) console.warn('set_push_preference', prefError.message);
+        if (enablePush) void requestWebPushPermission();
+      }
       return { error: error?.message ?? null };
     },
     [supabase],

@@ -5,6 +5,7 @@ import { CoverArt } from '@/components/CoverArt';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/auth-context';
 import type { Sound } from '@/types/database';
+import { appAlert } from '@/components/AppDialog';
 
 export default function AdminModerationPage() {
   const { isAdmin } = useAuth();
@@ -30,7 +31,7 @@ export default function AdminModerationPage() {
       p_status: status,
       p_reason: status === 'rejected' ? 'Did not meet quality or policy guidelines' : null,
     });
-    if (error) alert(error.message);
+    if (error) appAlert(error.message);
     else {
       await supabase.rpc('log_admin_action', {
         p_action: 'moderate_sound',

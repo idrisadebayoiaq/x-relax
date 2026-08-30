@@ -1,7 +1,6 @@
 import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   Pressable,
   StyleSheet,
@@ -23,17 +22,15 @@ import { useAppSettings } from '../../lib/AppSettingsProvider';
 import { cachePlaylistDetail, loadCachedPlaylistDetail } from '../../lib/offlineCache';
 import type { Playlist, Sound } from '../../types/database';
 import type { RootStackParamList } from '../../navigation/types';
+import { appAlert } from '../../ui/appAlert';
+import {
+  deletePlaylist,
+  isRenderedMixSound,
+  mixIdFromSound,
+  removePlaylistItem,
+} from '../../lib/libraryActions';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PlaylistDetail'>;
-
-const MIX_SOUND_PREFIX = '__xrelax_mix__:';
-
-function mixIdFromSound(sound: Sound): string | null {
-  const desc = sound.description ?? '';
-  if (!desc.startsWith(MIX_SOUND_PREFIX)) return null;
-  const id = desc.slice(MIX_SOUND_PREFIX.length).trim();
-  return id || null;
-}
 
 export function PlaylistDetailScreen() {
   const { colors, isDark } = useAppTheme();
@@ -122,7 +119,7 @@ export function PlaylistDetailScreen() {
   const toggleVisibility = async () => {
     if (!playlist || !isOwner) return;
     if (!online) {
-      Alert.alert('Offline', 'Connect to change playlist visibility.');
+      appAlert('Offline', 'Connect to change playlist visibility.');
       return;
     }
     const next = playlist.visibility === 'public' ? 'private' : 'public';
@@ -133,15 +130,15 @@ export function PlaylistDetailScreen() {
       .eq('id', playlist.id);
     setBusy(false);
     if (error) {
-      Alert.alert('Could not update', error.message);
+      appAlert('Could not update', error.message);
       return;
     }
     setPlaylist({ ...playlist, visibility: next });
   };
 
   const openOrPlay = async (item: Sound, index: number) => {
-    const mixId = mixIdFromSound(item);
-    if (mixId) {
+    const mixId = mixIdFromSound(item.description);
+    if (mixId && !isRenderedMixSound(item)) {
       navigation.navigate('MixStudio', { mixId });
       return;
     }
@@ -172,13 +169,37 @@ export function PlaylistDetailScreen() {
           <Ionicons name="chevron-back" size={28} color={colors.text} />
         </Pressable>
         {isOwner ? (
-          <Pressable onPress={() => void toggleVisibility()} disabled={busy} hitSlop={10} style={styles.iconBtn}>
-            <Ionicons
-              name={playlist?.visibility === 'public' ? 'globe-outline' : 'lock-closed-outline'}
-              size={22}
-              color={colors.text}
-            />
-          </Pressable>
+          <View style={{ flexDirection: 'row' }}>
+            <Pressable
+              onPress={() => {
+                if (!playlist) return;
+                appAlert('Delete playlist', `Delete "${playlist.title}" permanently?`, [
+                  { text: 'Cancel', style: 'cancel' },
+                  {
+                    text: 'Delete',
+                    style: 'destructive',
+                    onPress: async () => {
+                      if (!user) return;
+                      const { error } = await deletePlaylist(user.id, playlist.id);
+                      if (error) appAlert('Could not delete', error);
+                      else navigation.goBack();
+                    },
+                  },
+                ]);
+              }}
+              hitSlop={10}
+              style={styles.iconBtn}
+            >
+              <Ionicons name="trash-outline" size={20} color="#EF4444" />
+            </Pressable>
+            <Pressable onPress={() => void toggleVisibility()} disabled={busy} hitSlop={10} style={styles.iconBtn}>
+              <Ionicons
+                name={playlist?.visibility === 'public' ? 'globe-outline' : 'lock-closed-outline'}
+                size={22}
+                color={colors.text}
+              />
+            </Pressable>
+          </View>
         ) : (
           <View style={styles.iconBtn} />
         )}
@@ -281,7 +302,30 @@ export function PlaylistDetailScreen() {
                   </Text>
                 </View>
                 {active && isPlaying ? (
-                  <Ionicons name="pause" size={18} color={colors.text} style={{ marginRight: 16 }} />
+                  <Ionicons name="pause" size={18} color={colors.text} style={{ marginRight: 8 }} />
+                ) : null}
+                {isOwner ? (
+                  <Pressable
+                    onPress={() => {
+                      if (!playlist) return;
+                      appAlert('Remove sound', `Remove "${item.title}" from this playlist?`, [
+                        { text: 'Cancel', style: 'cancel' },
+                        {
+                          text: 'Remove',
+                          style: 'destructive',
+                          onPress: async () => {
+                            const { error } = await removePlaylistItem(playlist.id, item.id);
+                            if (error) appAlert('Could not remove', error);
+                            else void load();
+                          },
+                        },
+                      ]);
+                    }}
+                    hitSlop={8}
+                    style={{ paddingRight: 12 }}
+                  >
+                    <Ionicons name="close-circle-outline" size={20} color={colors.textMuted} />
+                  </Pressable>
                 ) : null}
               </Pressable>
             );

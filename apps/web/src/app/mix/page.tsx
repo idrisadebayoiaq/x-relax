@@ -19,6 +19,8 @@ import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/auth-context';
 import { usePlayer } from '@/lib/player-context';
 import type { Mix, Sound } from '@/types/database';
+import { appAlert } from '@/components/AppDialog';
+import { renderMixToWav } from '@/lib/mix-render';
 
 type SavedMix = Mix & { tracks: { volume: number; position: number; sound: Sound }[] };
 
@@ -35,7 +37,7 @@ export default function MixPage() {
 
 function MixStudio() {
   const { user, canUseMixes } = useAuth();
-  const { stopPlayback } = usePlayer();
+  const { stopPlayback, playSound } = usePlayer();
   const searchParams = useSearchParams();
   const [catalog, setCatalog] = useState<Sound[]>([]);
   const [selected, setSelected] = useState<MixLayer[]>([]);
@@ -135,7 +137,7 @@ function MixStudio() {
         .map((t) => ({ sound: t.sound, volume: Number(t.volume) || 0.8 }))
         .filter((l) => l.sound?.audio_url);
       if (!layers.length) {
-        alert('This mix has no playable sounds.');
+        appAlert('This mix has no playable sounds.');
         return;
       }
       setTitle(mix.title);
@@ -200,14 +202,14 @@ function MixStudio() {
       return;
     }
     if (selected.length >= maxTracks) {
-      alert(`Max ${maxTracks} tracks.`);
+      appAlert(`Max ${maxTracks} tracks.`);
       return;
     }
     setSelected((prev) => [...prev, { sound, volume: 0.8 }]);
   };
 
   const playMix = async () => {
-    if (!selectedRef.current.length) return alert('Select at least one sound.');
+    if (!selectedRef.current.length) return appAlert('Select at least one sound.');
     if (isMixPlaying(selectedRef.current)) {
       flushTick();
       pauseMixLayers(selectedRef.current);
@@ -237,31 +239,20 @@ function MixStudio() {
     }
   };
 
-  const ensureMyMixPlaylist = async (userId: string) => {
+  const ensureMyMixPlaylist = async () => {
     const supabase = createClient();
-    const { data: existing } = await supabase
-      .from('playlists')
-      .select('id')
-      .eq('user_id', userId)
-      .eq('title', MY_MIX_PLAYLIST)
-      .maybeSingle();
-    if (existing?.id) return existing.id as string;
-    const { data: created, error } = await supabase
-      .from('playlists')
-      .insert({ user_id: userId, title: MY_MIX_PLAYLIST })
-      .select('id')
-      .single();
-    if (error || !created) throw new Error(error?.message ?? 'Could not create My Mix playlist');
-    return created.id as string;
+    const { data, error } = await supabase.rpc('ensure_my_mix_playlist');
+    if (error || !data) throw new Error(error?.message ?? 'Could not resolve My Mix playlist');
+    return data as string;
   };
 
   const saveMix = async () => {
-    if (!user) return alert('Sign in to save mixes.');
-    if (!selected.length) return alert('Select sounds first.');
+    if (!user) return appAlert('Sign in to save mixes.');
+    if (!selected.length) return appAlert('Select sounds first.');
     flushTick();
     const playedSec = Math.floor(sessionElapsedRef.current);
     if (playedSec <= 0 && !savedDurationRef.current) {
-      return alert(
+      return appAlert(
         'Start your mix and let it play for a bit, then save. The duration becomes the length of your mix.',
       );
     }
@@ -271,8 +262,37 @@ function MixStudio() {
     const mixTitle = title.trim() || 'My mix';
     const durationSeconds = Math.max(playedSec, savedDurationRef.current ?? 0, 1);
     const coverUrl = selected[0]?.sound.cover_url ?? null;
-    const proxyAudioUrl = selected[0]?.sound.audio_url ?? null;
-    const proxyAudioPath = selected[0]?.sound.audio_path ?? null;
+    const layersSnapshot = [...selectedRef.current];
+
+    await stopMix();
+
+    let renderedUrl: string | null = null;
+    let renderedPath: string | null = null;
+    try {
+      const wavBlob = await renderMixToWav(
+        layersSnapshot
+          .filter((l) => l.sound.audio_url)
+          .map((l) => ({ url: l.sound.audio_url as string, volume: l.volume })),
+        durationSeconds,
+      );
+      const storagePath = `${user.id}/mix-renders/${mixId ?? 'new'}-${Date.now()}.wav`;
+      const { error: uploadError } = await supabase.storage
+        .from('sounds')
+        .upload(storagePath, wavBlob, { upsert: true, contentType: 'audio/wav' });
+      if (uploadError) {
+        setBusy(false);
+        return appAlert('Upload failed', uploadError.message);
+      }
+      const { data: pub } = supabase.storage.from('sounds').getPublicUrl(storagePath);
+      renderedUrl = `${pub.publicUrl}?v=${Date.now()}`;
+      renderedPath = storagePath;
+    } catch (err) {
+      setBusy(false);
+      return appAlert(
+        'Could not render mix',
+        err instanceof Error ? err.message : 'Try again while online.',
+      );
+    }
 
     let id = mixId;
     if (id) {
@@ -287,7 +307,7 @@ function MixStudio() {
         .eq('user_id', user.id);
       if (error) {
         setBusy(false);
-        return alert(error.message);
+        return appAlert(error.message);
       }
       await supabase.from('mix_tracks').delete().eq('mix_id', id);
     } else {
@@ -302,14 +322,14 @@ function MixStudio() {
         .single();
       if (error || !mix) {
         setBusy(false);
-        return alert(error?.message ?? 'Save failed');
+        return appAlert(error?.message ?? 'Save failed');
       }
       id = mix.id;
       setMixId(id);
     }
 
     const { error: tracksError } = await supabase.from('mix_tracks').insert(
-      selected.map((l, i) => ({
+      layersSnapshot.map((l, i) => ({
         mix_id: id,
         sound_id: l.sound.id,
         volume: l.volume,
@@ -318,7 +338,7 @@ function MixStudio() {
     );
     if (tracksError) {
       setBusy(false);
-      return alert(tracksError.message);
+      return appAlert(tracksError.message);
     }
 
     const desc = `${MIX_SOUND_PREFIX}${id}`;
@@ -328,8 +348,8 @@ function MixStudio() {
       title: mixTitle,
       description: desc,
       cover_url: coverUrl,
-      audio_url: proxyAudioUrl,
-      audio_path: proxyAudioPath,
+      audio_url: renderedUrl,
+      audio_path: renderedPath,
       duration_seconds: durationSeconds,
       status: 'draft' as const,
       updated_at: new Date().toISOString(),
@@ -354,7 +374,7 @@ function MixStudio() {
         setSavedDurationSec(durationSeconds);
         savedDurationRef.current = durationSeconds;
         await refreshSaved();
-        return alert(
+        return appAlert(
           `Mix saved to Library, but playlist link failed: ${soundErr?.message ?? 'unknown'}`,
         );
       }
@@ -368,7 +388,7 @@ function MixStudio() {
       .eq('id', id);
 
     try {
-      const playlistId = await ensureMyMixPlaylist(user.id);
+      const playlistId = await ensureMyMixPlaylist();
       await supabase.from('playlist_items').upsert(
         {
           playlist_id: playlistId,
@@ -383,11 +403,25 @@ function MixStudio() {
 
     setSavedDurationSec(durationSeconds);
     savedDurationRef.current = durationSeconds;
+    setSelected([]);
+    selectedRef.current = [];
+    setMixId(null);
+    setLinkedSoundId(null);
+    setSessionElapsedSec(0);
+    sessionElapsedRef.current = 0;
     setBusy(false);
     await refreshSaved();
-    alert(
-      `Saved to My Mix · ${formatElapsed(durationSeconds)} — find it in Library playlists “My Mix”.`,
-    );
+
+    const { data: savedSound } = await supabase
+      .from('sounds')
+      .select('*')
+      .eq('id', soundId)
+      .maybeSingle();
+    if (savedSound) {
+      await playSound(savedSound as Sound, { queueLabel: 'My Mix' });
+    }
+
+    appAlert('Saved to My Mix', `"${mixTitle}" is now one sound in playlist “My Mix”.`);
   };
 
   return (
@@ -437,27 +471,22 @@ function MixStudio() {
             <div key={layer.sound.id} className="card p-3 flex items-center gap-3">
               <CoverArt title={layer.sound.title} uri={layer.sound.cover_url} size={40} rounded={10} />
               <p className="flex-1 font-medium truncate">{layer.sound.title}</p>
-              <button
-                type="button"
-                className="chip"
-                onClick={() =>
-                  setSelected((prev) => setMixLayerVolume(prev, layer.sound.id, layer.volume - 0.1))
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={1}
+                value={Math.round(layer.volume * 100)}
+                onChange={(e) =>
+                  setSelected((prev) =>
+                    setMixLayerVolume(prev, layer.sound.id, Number(e.target.value) / 100),
+                  )
                 }
-              >
-                −
-              </button>
-              <span className="text-sm text-muted w-12 text-center">
+                className="w-28"
+              />
+              <span className="text-sm text-muted w-10 text-center">
                 {Math.round(layer.volume * 100)}%
               </span>
-              <button
-                type="button"
-                className="chip"
-                onClick={() =>
-                  setSelected((prev) => setMixLayerVolume(prev, layer.sound.id, layer.volume + 0.1))
-                }
-              >
-                +
-              </button>
               <button type="button" className="chip" onClick={() => void toggleSelect(layer.sound)}>
                 Remove
               </button>

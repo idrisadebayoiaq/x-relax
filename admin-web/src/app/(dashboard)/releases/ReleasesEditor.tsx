@@ -5,6 +5,8 @@ import { ActionButton } from '@/components/ActionButton';
 import { formatBytes } from '@/lib/format';
 import { createClient } from '@/lib/supabase/client';
 import type { AppRelease, AppReleaseStatus } from '@/types/database';
+import { appAlert, appConfirm } from '@/components/AppDialog';
+
 
 const STATUSES: AppReleaseStatus[] = ['coming_soon', 'available', 'archived'];
 const consumerWebUrl = process.env.NEXT_PUBLIC_CONSUMER_WEB_URL ?? 'http://localhost:3001';
@@ -43,7 +45,7 @@ export function ReleasesEditor() {
 
   const saveRelease = async () => {
     if (!form.version.trim() || !form.title.trim()) {
-      alert('Version and title are required.');
+      appAlert('Version and title are required.');
       return;
     }
     setBusy(true);
@@ -62,7 +64,7 @@ export function ReleasesEditor() {
         });
       if (uploadError) {
         setBusy(false);
-        alert(uploadError.message);
+        appAlert(uploadError.message);
         return;
       }
       fileSize = apkFile.size;
@@ -84,7 +86,7 @@ export function ReleasesEditor() {
 
     setBusy(false);
     if (error) {
-      alert(error.message);
+      appAlert(error.message);
       return;
     }
 
@@ -112,10 +114,10 @@ export function ReleasesEditor() {
   };
 
   const deleteRelease = async (id: string) => {
-    if (!confirm('Delete this release entry?')) return;
+    if (!(await appConfirm('Delete this release entry?'))) return;
     const supabase = createClient();
     const { error } = await supabase.from('app_releases').delete().eq('id', id);
-    if (error) alert(error.message);
+    if (error) appAlert(error.message);
     else {
       await supabase.rpc('log_admin_action', {
         p_action: 'delete_app_release',

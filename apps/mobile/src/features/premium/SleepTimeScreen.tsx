@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -10,6 +9,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+
 import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAppTheme } from '../../lib/useAppTheme';
@@ -34,6 +34,8 @@ import { CoverArt } from '../home/CoverArt';
 import type { Playlist, Sound } from '../../types/database';
 import type { RootStackParamList } from '../../navigation/types';
 import { ScreenScaffold, SectionLabel } from '../../ui/Screen';
+import { appAlert } from '../../ui/appAlert';
+
 
 type Props = NativeStackScreenProps<RootStackParamList, 'SleepTime'>;
 type SoundTab = 'sleep' | 'liked' | 'playlists' | 'search';
@@ -278,7 +280,7 @@ export function SleepTimeScreen({ navigation }: Props) {
         return { ...prev, soundIds: prev.soundIds.filter((x) => x !== id) };
       }
       if (!hasUnlimitedListening && !unlockedToday.includes(id) && dailyRemaining <= 0) {
-        Alert.alert('Daily limit reached', DAILY_LIMIT_MESSAGE, [
+        appAlert('Daily limit reached', DAILY_LIMIT_MESSAGE, [
           { text: 'Not now', style: 'cancel' },
           { text: 'View Premium', onPress: () => navigation.navigate('Premium') },
         ]);
@@ -306,14 +308,14 @@ export function SleepTimeScreen({ navigation }: Props) {
 
   const handleEnableToggle = (next: boolean) => {
     if (next && !canEnableFree) {
-      Alert.alert('Upgrade to Premium', DAILY_LIMIT_MESSAGE, [
+      appAlert('Upgrade to Premium', DAILY_LIMIT_MESSAGE, [
         { text: 'Not now', style: 'cancel' },
         { text: 'View Premium', onPress: () => navigation.navigate('Premium') },
       ]);
       return;
     }
     if (next && schedule.soundIds.length === 0) {
-      Alert.alert('Pick sounds', 'Select at least one sound for Sleep Time.');
+      appAlert('Pick sounds', 'Select at least one sound for Sleep Time.');
       return;
     }
     setSchedule((prev) => ({ ...prev, enabled: next }));
@@ -322,11 +324,11 @@ export function SleepTimeScreen({ navigation }: Props) {
   const handleSave = async () => {
     if (!user) return;
     if (schedule.enabled && !canEnableFree) {
-      Alert.alert('Upgrade to Premium', DAILY_LIMIT_MESSAGE);
+      appAlert('Upgrade to Premium', DAILY_LIMIT_MESSAGE);
       return;
     }
     if (schedule.enabled && schedule.soundIds.length === 0) {
-      Alert.alert('Pick sounds', 'Select at least one sound for Sleep Time.');
+      appAlert('Pick sounds', 'Select at least one sound for Sleep Time.');
       return;
     }
     setSaving(true);
@@ -335,7 +337,7 @@ export function SleepTimeScreen({ navigation }: Props) {
       : { ...schedule, loop: false, stopAfterMinutes: null };
     await saveSleepTimeSchedule(user.id, toSave);
     setSaving(false);
-    Alert.alert(
+    appAlert(
       'Saved',
       schedule.enabled
         ? `Sleep Time set for ${formatTimeLabel(schedule.hour, schedule.minute)}.`

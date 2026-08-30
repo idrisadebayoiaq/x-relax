@@ -7,7 +7,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: 'X-Relax',
   slug: 'x-relax',
-  version: '1.0.11',
+  version: '1.0.13',
   orientation: 'portrait',
   icon: './assets/brand/app-icon.png',
   userInterfaceStyle: 'automatic',
@@ -30,7 +30,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     googleServicesFile:
       process.env.GOOGLE_SERVICES_JSON ?? './google-services.json',
     adaptiveIcon: {
-      foregroundImage: './assets/brand/app-icon.png',
+      foregroundImage: './assets/brand/adaptive-foreground.png',
       backgroundColor: '#061428',
     },
     predictiveBackGestureEnabled: false,

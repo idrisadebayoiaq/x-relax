@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/auth-context';
 import { usePlayer } from '@/lib/player-context';
 import type { Sound } from '@/types/database';
+import { appAlert } from '@/components/AppDialog';
 
 type ReviewRow = {
   id: string;
@@ -104,8 +105,8 @@ export function SoundRatingPanel({
   }, [load]);
 
   const submit = async () => {
-    if (!user) return alert('Sign in to rate sounds.');
-    if (myScore < 1) return alert('Choose a star rating first.');
+    if (!user) return appAlert('Sign in to rate sounds.');
+    if (myScore < 1) return appAlert('Choose a star rating first.');
     setBusy(true);
     const supabase = createClient();
     const { error: ratingError } = await supabase.from('ratings').upsert(
@@ -119,7 +120,7 @@ export function SoundRatingPanel({
     );
     if (ratingError) {
       setBusy(false);
-      return alert(ratingError.message);
+      return appAlert(ratingError.message);
     }
 
     const trimmed = comment.trim();
@@ -135,13 +136,13 @@ export function SoundRatingPanel({
       );
       if (reviewError) {
         setBusy(false);
-        return alert(reviewError.message);
+        return appAlert(reviewError.message);
       }
     }
 
     setBusy(false);
     await load();
-    alert('Your rating was saved.');
+    appAlert('Your rating was saved.');
   };
 
   return (

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Platform,
   Pressable,
   ScrollView,
@@ -10,6 +9,8 @@ import {
   TextInput,
   View,
 } from 'react-native';
+
+import Slider from '@react-native-community/slider';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -21,6 +22,8 @@ import { CoverArt } from '../home/CoverArt';
 import { formatElapsed, formatDuration } from '../../lib/format';
 import type { Category, Sound } from '../../types/database';
 import type { RootStackParamList } from '../../navigation/types';
+import { appAlert } from '../../ui/appAlert';
+
 
 type Props = NativeStackScreenProps<RootStackParamList, 'MixStudio'>;
 
@@ -43,41 +46,21 @@ function VolumeSlider({
 }: {
   value: number;
   onChange: (v: number) => void;
-  colors: { text: string; border: string };
+  colors: { text: string; border: string; accent: string };
 }) {
-  const widthRef = useRef(1);
   return (
     <View style={styles.volRow}>
-      <Pressable
-        style={[styles.volTrack, { backgroundColor: 'rgba(128,128,128,0.35)' }]}
-        onLayout={(e) => {
-          widthRef.current = e.nativeEvent.layout.width || 1;
-        }}
-        onPress={(e) => {
-          const w = widthRef.current || 1;
-          onChange(Math.min(1, Math.max(0, e.nativeEvent.locationX / w)));
-        }}
-      >
-        <View
-          style={[
-            styles.volFill,
-            {
-              width: `${Math.min(100, value * 100)}%` as `${number}%`,
-              backgroundColor: colors.text,
-            },
-          ]}
-        />
-        <View
-          style={[
-            styles.volKnob,
-            {
-              left: `${Math.min(96, Math.max(0, value * 100))}%` as `${number}%`,
-              backgroundColor: '#FFFFFF',
-              borderColor: colors.border,
-            },
-          ]}
-        />
-      </Pressable>
+      <Slider
+        style={{ flex: 1, height: 32 }}
+        minimumValue={0}
+        maximumValue={1}
+        step={0.01}
+        value={value}
+        onValueChange={onChange}
+        minimumTrackTintColor={colors.accent}
+        maximumTrackTintColor="rgba(128,128,128,0.35)"
+        thumbTintColor={colors.text}
+      />
       <Text style={[styles.volPct, { color: colors.text }]}>{Math.round(value * 100)}%</Text>
     </View>
   );
@@ -192,7 +175,7 @@ export function MixStudioScreen({ navigation, route }: Props) {
 
   const promptSave = () => {
     if (!canUseMixes) {
-      Alert.alert('Premium feature', 'Saving mixes requires Premium.', [
+      appAlert('Premium feature', 'Saving mixes requires Premium.', [
         { text: 'Not now', style: 'cancel' },
         { text: 'View Premium', onPress: () => navigation.navigate('Premium') },
       ]);
@@ -218,7 +201,7 @@ export function MixStudioScreen({ navigation, route }: Props) {
       );
       return;
     }
-    Alert.alert(
+    appAlert(
       'Save Mix',
       `Save "${mixTitle}" (${elapsedLabel} played) to My Mixes?`,
       [
@@ -346,7 +329,7 @@ export function MixStudioScreen({ navigation, route }: Props) {
             <View style={styles.transport}>
             <Pressable
               onPress={() => {
-                Alert.alert('Sleep timer', 'Stop the whole mix when time is up.', [
+                appAlert('Sleep timer', 'Stop the whole mix when time is up.', [
                   ...[10, 20, 30, 45, 60].map((m) => ({
                     text: `${m} min`,
                     onPress: () => setSleepTimerMinutes(m),

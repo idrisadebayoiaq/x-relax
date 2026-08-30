@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { appAlert } from '@/components/AppDialog';
 
 type Plan = {
   id: string;
@@ -29,7 +30,7 @@ export function PlansEditor({ plans }: { plans: Plan[] }) {
         is_active: plan.is_active,
       })
       .eq('id', plan.id);
-    if (error) alert(error.message);
+    if (error) appAlert(error.message);
     else {
       await supabase.rpc('log_admin_action', {
         p_action: 'update_plan',
@@ -38,7 +39,7 @@ export function PlansEditor({ plans }: { plans: Plan[] }) {
         p_meta: { name: plan.name },
       });
       router.refresh();
-      alert('Plan saved');
+      appAlert('Plan saved');
     }
   };
 

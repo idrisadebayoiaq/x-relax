@@ -24,6 +24,7 @@ export type Profile = {
   role: UserRole;
   premium_status: PremiumStatus;
   theme_preference: ThemePreference;
+  push_enabled?: boolean;
   created_at: string;
   updated_at: string;
 };

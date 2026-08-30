@@ -2,6 +2,7 @@
 
 import { ActionButton } from '@/components/ActionButton';
 import { createClient } from '@/lib/supabase/client';
+import { appAlert } from '@/components/AppDialog';
 
 export function WithdrawalActions({ id, status }: { id: string; status: string }) {
   const review = async (next: 'approved' | 'rejected' | 'paid') => {
@@ -11,7 +12,7 @@ export function WithdrawalActions({ id, status }: { id: string; status: string }
       p_status: next,
       p_admin_note: null,
     });
-    if (error) alert(error.message);
+    if (error) appAlert(error.message);
     else {
       await supabase.rpc('log_admin_action', {
         p_action: 'review_withdrawal',

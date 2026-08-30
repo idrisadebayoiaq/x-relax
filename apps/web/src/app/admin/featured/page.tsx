@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/auth-context';
+import { appAlert } from '@/components/AppDialog';
 
 type Collection = { id: string; title: string; description: string | null; is_active: boolean };
 type SoundOption = { id: string; title: string };
@@ -41,7 +42,7 @@ export default function AdminFeaturedPage() {
       is_active: true,
       sort_order: 99,
     });
-    if (error) alert(error.message);
+    if (error) appAlert(error.message);
     else {
       setTitle('');
       setDescription('');
@@ -56,8 +57,8 @@ export default function AdminFeaturedPage() {
       value: dailyPick,
       updated_at: new Date().toISOString(),
     });
-    if (error) alert(error.message);
-    else alert('Daily pick saved.');
+    if (error) appAlert(error.message);
+    else appAlert('Daily pick saved.');
   };
 
   if (!isAdmin) return null;

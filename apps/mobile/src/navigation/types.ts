@@ -2,6 +2,7 @@ export type AuthStackParamList = {
   SignIn: undefined;
   SignUp: undefined;
   ForgotPassword: undefined;
+  Legal: { doc: 'privacy' | 'terms' };
 };
 
 export type MainTabParamList = {

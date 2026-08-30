@@ -15,11 +15,17 @@ export default function SignupPage() {
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<SignupRole>('listener');
   const [countryCode, setCountryCode] = useState('');
+  const [enablePush, setEnablePush] = useState(true);
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!agreedToTerms) {
+      setError('Please agree to the Terms of Use and Privacy Policy');
+      return;
+    }
     if (!countryCode) {
       setError('Please select your country');
       return;
@@ -32,6 +38,7 @@ export default function SignupPage() {
       displayName,
       role,
       countryCode,
+      enablePush,
     });
     setBusy(false);
     if (err) {
@@ -98,7 +105,39 @@ export default function SignupPage() {
             </button>
           ))}
         </div>
-        <button type="submit" className="btn btn-primary w-full" disabled={busy}>
+        <label className="flex items-start gap-3 rounded-2xl border border-border px-4 py-3 cursor-pointer">
+          <input
+            type="checkbox"
+            className="mt-1"
+            checked={enablePush}
+            onChange={(e) => setEnablePush(e.target.checked)}
+          />
+          <span>
+            <span className="block font-semibold">Enable push notifications</span>
+            <span className="block text-xs text-muted mt-0.5">
+              Stay on until you turn them off in Settings. You will not be asked again.
+            </span>
+          </span>
+        </label>
+        <label className="flex items-start gap-3 rounded-2xl border border-border px-4 py-3 cursor-pointer">
+          <input
+            type="checkbox"
+            className="mt-1"
+            checked={agreedToTerms}
+            onChange={(e) => setAgreedToTerms(e.target.checked)}
+          />
+          <span className="text-sm">
+            I agree to the{' '}
+            <Link href="/legal/terms" className="underline font-semibold" target="_blank">
+              Terms of Use
+            </Link>{' '}
+            and{' '}
+            <Link href="/legal/privacy" className="underline font-semibold" target="_blank">
+              Privacy Policy
+            </Link>
+          </span>
+        </label>
+        <button type="submit" className="btn btn-primary w-full" disabled={busy || !agreedToTerms}>
           {busy ? 'Creating…' : 'Sign up'}
         </button>
         <p className="text-sm text-muted">

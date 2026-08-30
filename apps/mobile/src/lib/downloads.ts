@@ -1,13 +1,46 @@
 import * as FileSystem from 'expo-file-system/legacy';
-import { Alert } from 'react-native';
+import * as Notifications from 'expo-notifications';
+import { Platform } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { canDownloadOnCurrentNetwork, isDeviceOnline, loadAppSettings } from './appSettings';
 import { upsertCachedDownload } from './offlineCache';
 import type { Sound } from '../types/database';
+import { appAlert } from '../ui/appAlert';
+
+export type DownloadProgressCallback = (progress: number) => void;
+
+async function ensureDownloadChannel() {
+  if (Platform.OS !== 'android') return;
+  await Notifications.setNotificationChannelAsync('downloads', {
+    name: 'Downloads',
+    importance: Notifications.AndroidImportance.DEFAULT,
+    description: 'Offline download progress and completion',
+    vibrationPattern: [0, 120],
+    lightColor: '#F5C400',
+  });
+}
+
+export async function notifyDownloadComplete(title: string) {
+  try {
+    await ensureDownloadChannel();
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: 'Download complete',
+        body: `"${title}" is ready for offline listening.`,
+        sound: true,
+        ...(Platform.OS === 'android' ? { channelId: 'downloads' } : {}),
+      },
+      trigger: null,
+    });
+  } catch (err) {
+    console.warn('Download notification failed', err);
+  }
+}
 
 export async function downloadSoundForOffline(
   userId: string,
   sound: Sound,
+  onProgress?: DownloadProgressCallback,
 ): Promise<{ ok: boolean; message: string }> {
   const settings = await loadAppSettings();
   const networkGate = await canDownloadOnCurrentNetwork(settings.downloadNetwork);
@@ -34,10 +67,26 @@ export async function downloadSoundForOffline(
   }
 
   const target = `${dir}${sound.id}.mp3`;
-  const result = await FileSystem.downloadAsync(sound.audio_url, target);
-  if (result.status !== 200) {
-    return { ok: false, message: `Download failed (${result.status})` };
+  onProgress?.(0);
+
+  const downloadResumable = FileSystem.createDownloadResumable(
+    sound.audio_url,
+    target,
+    {},
+    (progress) => {
+      const total = progress.totalBytesExpectedToWrite;
+      if (total > 0) {
+        onProgress?.(Math.min(1, progress.totalBytesWritten / total));
+      }
+    },
+  );
+
+  const result = await downloadResumable.downloadAsync();
+  if (!result || result.status !== 200) {
+    return { ok: false, message: `Download failed (${result?.status ?? 'unknown'})` };
   }
+
+  onProgress?.(1);
 
   const { error } = await supabase.from('downloads').upsert(
     {
@@ -55,7 +104,6 @@ export async function downloadSoundForOffline(
   });
 
   if (error) {
-    // Still usable offline even if remote row failed.
     return {
       ok: true,
       message: 'Saved on this device (cloud sync pending when online).',
@@ -65,7 +113,9 @@ export async function downloadSoundForOffline(
 }
 
 export function alertDownloadResult(result: { ok: boolean; message: string }) {
-  Alert.alert(result.ok ? 'Downloaded' : 'Download failed', result.message);
+  if (!result.ok) {
+    appAlert('Download failed', result.message);
+  }
 }
 
 export async function resolvePlayableUrl(sound: Sound): Promise<string | null> {
@@ -79,7 +129,6 @@ export async function resolvePlayableUrl(sound: Sound): Promise<string | null> {
   if (sound.audio_url?.startsWith('file://') || sound.audio_url?.startsWith('/')) {
     return sound.audio_url;
   }
-  // Offline: never fall back to remote URLs — downloads only.
   if (!(await isDeviceOnline())) return null;
   return sound.audio_url ?? null;
 }

@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Image,
   Pressable,
   StyleSheet,
@@ -14,10 +13,12 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAppTheme } from '../../lib/useAppTheme';
 import { useAuth } from '../auth/AuthProvider';
 import { paymentMethodForCountry } from '../../lib/countries';
+import { fetchPremiumAccess, formatPremiumCoverage } from '../../lib/premiumAccess';
 import { supabase } from '../../lib/supabase';
 import type { PaymentMethod, SubscriptionPlan } from '../../types/database';
 import type { RootStackParamList } from '../../navigation/types';
 import { PrimaryButton, ScreenScaffold, SectionLabel } from '../../ui/Screen';
+import { appAlert } from '../../ui/appAlert';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PaymentCheckout'>;
 
@@ -44,6 +45,7 @@ export function PaymentCheckoutScreen() {
   const [proofUri, setProofUri] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [blockedReason, setBlockedReason] = useState<string | null>(null);
 
   useEffect(() => {
     setMethod(allowedMethod);
@@ -59,8 +61,15 @@ export function PaymentCheckoutScreen() {
           .maybeSingle(),
         supabase.from('app_settings').select('value').eq('key', 'payment_methods').maybeSingle(),
       ]);
-      setPlan(planRow as SubscriptionPlan | null);
+      const nextPlan = planRow as SubscriptionPlan | null;
+      setPlan(nextPlan);
       setMethods((settings?.value as Record<string, MethodInfo>) ?? {});
+      if (nextPlan && nextPlan.code !== 'creator_blue_badge') {
+        const access = await fetchPremiumAccess();
+        if (!access.canPurchase) {
+          setBlockedReason(formatPremiumCoverage(access));
+        }
+      }
       setLoading(false);
     })();
   }, [route.params.planId]);
@@ -77,7 +86,11 @@ export function PaymentCheckoutScreen() {
 
   const submit = async () => {
     if (!user || !plan || !proofUri) {
-      Alert.alert('Missing proof', 'Upload a payment screenshot or receipt.');
+      appAlert('Missing proof', 'Upload a payment screenshot or receipt.');
+      return;
+    }
+    if (blockedReason) {
+      appAlert('Already Premium', blockedReason);
       return;
     }
     setBusy(true);
@@ -100,7 +113,13 @@ export function PaymentCheckoutScreen() {
 
     if (payError || !payment) {
       setBusy(false);
-      Alert.alert('Failed', payError?.message ?? 'Could not create payment');
+      const denied = /row-level security|violates/i.test(payError?.message ?? '');
+      appAlert(
+        'Failed',
+        denied
+          ? 'You already have Premium or a payment waiting for approval.'
+          : (payError?.message ?? 'Could not create payment'),
+      );
       return;
     }
 
@@ -114,7 +133,7 @@ export function PaymentCheckoutScreen() {
 
     if (uploadError) {
       setBusy(false);
-      Alert.alert('Upload failed', uploadError.message);
+      appAlert('Upload failed', uploadError.message);
       return;
     }
 
@@ -134,7 +153,7 @@ export function PaymentCheckoutScreen() {
     });
 
     setBusy(false);
-    Alert.alert('Submitted', 'Admin will verify your payment shortly.');
+    appAlert('Submitted', 'Admin will verify your payment shortly.');
     navigation.goBack();
   };
 
@@ -154,6 +173,17 @@ export function PaymentCheckoutScreen() {
       subtitle="Pay manually, then upload proof for approval"
       onBack={() => navigation.goBack()}
     >
+      {blockedReason ? (
+        <View style={[styles.blocked, { borderColor: colors.border, backgroundColor: colors.accentSoft }]}>
+          <Text style={{ color: colors.text, fontFamily: 'DMSans_700Bold', fontSize: 16, marginBottom: 6 }}>
+            Plans are closed
+          </Text>
+          <Text style={{ color: colors.textMuted, fontFamily: 'DMSans_400Regular', fontSize: 14, lineHeight: 20 }}>
+            {blockedReason}
+          </Text>
+        </View>
+      ) : (
+        <>
       <SectionLabel>Payment method</SectionLabel>
       {!profile?.country_code ? (
         <Text style={{ color: colors.textMuted, fontFamily: 'DMSans_400Regular', marginBottom: 10 }}>
@@ -253,12 +283,22 @@ export function PaymentCheckoutScreen() {
         loading={busy}
         disabled={busy}
       />
+        </>
+      )}
     </ScreenScaffold>
   );
 }
 
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  blocked: {
+    marginHorizontal: 20,
+    marginTop: 8,
+    marginBottom: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 16,
+    padding: 16,
+  },
   row: { flexDirection: 'row', gap: 8, marginHorizontal: 20, marginBottom: 16 },
   chip: {
     flex: 1,

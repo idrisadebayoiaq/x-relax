@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { ActionButton } from '@/components/ActionButton';
 import { createClient } from '@/lib/supabase/client';
 import type { AdminListRow, AdminRole } from '@/types/database';
+import { appAlert, appConfirm } from '@/components/AppDialog';
 
 const ROLES: AdminRole[] = ['finance', 'content', 'support'];
 
@@ -47,11 +48,11 @@ export function AdminsManager() {
   };
 
   const removeAdmin = async (userId: string) => {
-    if (!confirm('Remove admin access for this user?')) return;
+    if (!(await appConfirm('Remove admin access for this user?'))) return;
     const { error: removeError } = await createClient().rpc('admin_remove_admin', {
       p_user_id: userId,
     });
-    if (removeError) alert(removeError.message);
+    if (removeError) appAlert(removeError.message);
     else void load();
   };
 
@@ -60,7 +61,7 @@ export function AdminsManager() {
       p_user_id: userId,
       p_role: nextRole,
     });
-    if (updateError) alert(updateError.message);
+    if (updateError) appAlert(updateError.message);
     else void load();
   };
 
@@ -69,7 +70,7 @@ export function AdminsManager() {
       p_user_id: userId,
       p_enabled: enabled,
     });
-    if (badgeError) alert(badgeError.message);
+    if (badgeError) appAlert(badgeError.message);
     else void load();
   };
 

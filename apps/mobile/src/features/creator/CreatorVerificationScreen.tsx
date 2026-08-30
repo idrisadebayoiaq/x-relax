@@ -1,6 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
 import {
-  Alert,
   Pressable,
   StyleSheet,
   Text,
@@ -15,6 +14,7 @@ import { useAuth } from '../auth/AuthProvider';
 import { supabase } from '../../lib/supabase';
 import { PrimaryButton, ScreenScaffold, SectionLabel } from '../../ui/Screen';
 import type { RootStackParamList } from '../../navigation/types';
+import { appAlert } from '../../ui/appAlert';
 
 type Requirement = {
   key: string;
@@ -76,7 +76,7 @@ export function CreatorVerificationScreen() {
 
   const pickDoc = async () => {
     if (!eligible) {
-      Alert.alert(
+      appAlert(
         'Requirements not met',
         'Meet all earning requirements before you can verify your identity.',
       );
@@ -94,14 +94,14 @@ export function CreatorVerificationScreen() {
   const submit = async () => {
     if (!user) return;
     if (!eligible) {
-      Alert.alert(
+      appAlert(
         'Requirements not met',
         'You cannot verify identity or submit an earning request until requirements are complete.',
       );
       return;
     }
     if (!docUri) {
-      Alert.alert('Document required', 'Upload a government ID document.');
+      appAlert('Document required', 'Upload a government ID document.');
       return;
     }
     setBusy(true);
@@ -113,7 +113,7 @@ export function CreatorVerificationScreen() {
       .upload(path, blob, { upsert: true, contentType: blob.type || 'application/octet-stream' });
     if (uploadError) {
       setBusy(false);
-      Alert.alert('Upload failed', uploadError.message);
+      appAlert('Upload failed', uploadError.message);
       return;
     }
     const { error } = await supabase.rpc('submit_creator_verification', {
@@ -123,10 +123,10 @@ export function CreatorVerificationScreen() {
     });
     setBusy(false);
     if (error) {
-      Alert.alert('Cannot submit', error.message);
+      appAlert('Cannot submit', error.message);
       return;
     }
-    Alert.alert('Submitted', 'Admins will review your earning application and identity.');
+    appAlert('Submitted', 'Admins will review your earning application and identity.');
     load();
   };
 

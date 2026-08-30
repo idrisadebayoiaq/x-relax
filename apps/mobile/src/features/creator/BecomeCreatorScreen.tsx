@@ -1,10 +1,15 @@
 import { useState } from 'react';
-import { Alert, StyleSheet, TextInput, View } from 'react-native';
+import {
+  StyleSheet,
+  TextInput,
+  View,
+} from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useAppTheme } from '../../lib/useAppTheme';
 import { useAuth } from '../auth/AuthProvider';
 import { supabase } from '../../lib/supabase';
 import { PrimaryButton, ScreenScaffold } from '../../ui/Screen';
+import { appAlert } from '../../ui/appAlert';
 
 export function BecomeCreatorScreen() {
   const { colors, isDark } = useAppTheme();
@@ -22,11 +27,11 @@ export function BecomeCreatorScreen() {
     });
     setBusy(false);
     if (error) {
-      Alert.alert('Could not continue', error.message);
+      appAlert('Could not continue', error.message);
       return;
     }
     await refreshProfile();
-    Alert.alert('Welcome', 'Your creator profile is ready.');
+    appAlert('Welcome', 'Your creator profile is ready.');
     navigation.goBack();
   };
 

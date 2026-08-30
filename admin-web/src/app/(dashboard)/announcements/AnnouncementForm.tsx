@@ -3,6 +3,8 @@
 import { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { appConfirm } from '@/components/AppDialog';
+
 
 const AUDIENCES = [
   { value: 'all', label: 'Everyone' },
@@ -39,7 +41,7 @@ export function AnnouncementForm() {
         e.preventDefault();
         start(async () => {
           if (!verified) {
-            const ok = confirm(
+            const ok = await appConfirm(
               'Warning: your admin account is not blue-verified. Recipients will see a warning. Continue?',
             );
             if (!ok) return;

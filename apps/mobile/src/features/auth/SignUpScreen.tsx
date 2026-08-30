@@ -32,6 +32,8 @@ export function SignUpScreen({ navigation }: Props) {
   const [role, setRole] = useState<SignupRole>('listener');
   const [countryCode, setCountryCode] = useState('');
   const [showCountries, setShowCountries] = useState(false);
+  const [enablePush, setEnablePush] = useState(true);
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -51,8 +53,19 @@ export function SignUpScreen({ navigation }: Props) {
       setError('Password must be at least 6 characters');
       return;
     }
+    if (!agreedToTerms) {
+      setError('Please agree to the Terms of Use and Privacy Policy');
+      return;
+    }
     setBusy(true);
-    const result = await signUp({ email, password, displayName, role, countryCode });
+    const result = await signUp({
+      email,
+      password,
+      displayName,
+      role,
+      countryCode,
+      enablePush,
+    });
     setBusy(false);
     if (result.error) {
       setError(result.error);
@@ -209,10 +222,86 @@ export function SignUpScreen({ navigation }: Props) {
             </ScrollView>
           ) : null}
 
+          <Pressable
+            onPress={() => setEnablePush((v) => !v)}
+            style={[
+              styles.pushRow,
+              {
+                borderColor: colors.border,
+                backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : colors.surface,
+              },
+            ]}
+          >
+            <Ionicons
+              name={enablePush ? 'notifications' : 'notifications-off-outline'}
+              size={20}
+              color={enablePush ? colors.accent : colors.textMuted}
+            />
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: colors.text, fontFamily: 'DMSans_700Bold', fontSize: 14 }}>
+                Enable push notifications
+              </Text>
+              <Text style={{ color: colors.textMuted, fontFamily: 'DMSans_400Regular', fontSize: 12, marginTop: 2 }}>
+                Stay on until you turn them off in Settings
+              </Text>
+            </View>
+            <View
+              style={[
+                styles.toggle,
+                { backgroundColor: enablePush ? colors.accent : colors.border },
+              ]}
+            >
+              <View
+                style={[
+                  styles.toggleKnob,
+                  { alignSelf: enablePush ? 'flex-end' : 'flex-start' },
+                ]}
+              />
+            </View>
+          </Pressable>
+
+          <Pressable
+            onPress={() => setAgreedToTerms((v) => !v)}
+            style={[
+              styles.pushRow,
+              {
+                borderColor: colors.border,
+                backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : colors.surface,
+              },
+            ]}
+          >
+            <Ionicons
+              name={agreedToTerms ? 'checkbox' : 'square-outline'}
+              size={22}
+              color={agreedToTerms ? colors.accent : colors.textMuted}
+            />
+            <Text style={{ color: colors.text, fontFamily: 'DMSans_400Regular', fontSize: 13, flex: 1 }}>
+              I agree to the{' '}
+              <Text
+                style={{ color: colors.accent, fontFamily: 'DMSans_700Bold' }}
+                onPress={() => navigation.navigate('Legal', { doc: 'terms' })}
+              >
+                Terms of Use
+              </Text>{' '}
+              and{' '}
+              <Text
+                style={{ color: colors.accent, fontFamily: 'DMSans_700Bold' }}
+                onPress={() => navigation.navigate('Legal', { doc: 'privacy' })}
+              >
+                Privacy Policy
+              </Text>
+            </Text>
+          </Pressable>
+
           {error ? <Text style={[styles.message, { color: colors.text }]}>{error}</Text> : null}
           {info ? <Text style={[styles.message, { color: colors.textMuted }]}>{info}</Text> : null}
 
-          <PrimaryButton label="Sign up" onPress={onSubmit} loading={busy} disabled={busy} />
+          <PrimaryButton
+            label="Sign up"
+            onPress={onSubmit}
+            loading={busy}
+            disabled={busy || !agreedToTerms}
+          />
 
           <Pressable onPress={() => navigation.goBack()} disabled={busy} style={styles.linkRow}>
             <Ionicons name="arrow-back-outline" size={16} color={colors.textMuted} />
@@ -302,5 +391,28 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: 'rgba(128,128,128,0.25)',
+  },
+  pushRow: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  toggle: {
+    width: 42,
+    height: 24,
+    borderRadius: 12,
+    padding: 2,
+    justifyContent: 'center',
+  },
+  toggleKnob: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
   },
 });

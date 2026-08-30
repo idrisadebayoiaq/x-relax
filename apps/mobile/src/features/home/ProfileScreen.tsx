@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import {
-  Alert,
   Modal,
   Pressable,
   ScrollView,
@@ -9,6 +8,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
@@ -25,6 +25,8 @@ import type { RootStackParamList } from '../../navigation/types';
 import { ScreenScaffold } from '../../ui/Screen';
 import { VerifiedBadge } from '../../ui/VerifiedBadge';
 import { ShareAppSheet } from '../../navigation/ShareAppSheet';
+import { appAlert } from '../../ui/appAlert';
+
 
 
 type ProfileStats = {
@@ -188,11 +190,11 @@ export function ProfileScreen() {
   const onSave = async () => {
     const trimmed = name.trim();
     if (trimmed.length < 2) {
-      Alert.alert('Name required', 'Enter at least 2 characters.');
+      appAlert('Name required', 'Enter at least 2 characters.');
       return;
     }
     if (!countryCode) {
-      Alert.alert('Country required', 'Select your country for payments and analytics.');
+      appAlert('Country required', 'Select your country for payments and analytics.');
       return;
     }
     setBusy(true);
@@ -206,13 +208,13 @@ export function ProfileScreen() {
     });
     setBusy(false);
     if (result.error) {
-      Alert.alert('Could not save', result.error);
+      appAlert('Could not save', result.error);
       return;
     }
     setAvatarUri(null);
     setBannerUri(null);
     setEditOpen(false);
-    Alert.alert('Saved', 'Your profile was updated.');
+    appAlert('Saved', 'Your profile was updated.');
   };
 
   const initial = (profile?.display_name?.trim()?.[0] ?? user?.email?.[0] ?? 'X').toUpperCase();
@@ -497,7 +499,7 @@ export function ProfileScreen() {
       <Pressable
         style={[styles.signOut, { borderColor: colors.danger === '#FFFFFF' ? '#EF4444' : '#EF4444' }]}
         onPress={() =>
-          Alert.alert('Sign out', 'Sign out of X-Relax?', [
+          appAlert('Sign out', 'Sign out of X-Relax?', [
             { text: 'Cancel', style: 'cancel' },
             { text: 'Sign out', style: 'destructive', onPress: () => void signOut() },
           ])

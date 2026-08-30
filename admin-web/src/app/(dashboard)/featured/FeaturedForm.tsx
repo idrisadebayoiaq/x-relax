@@ -3,6 +3,8 @@
 import { FormEvent, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { appAlert } from '@/components/AppDialog';
+
 
 export function FeaturedForm() {
   const [title, setTitle] = useState('');
@@ -18,7 +20,7 @@ export function FeaturedForm() {
       is_active: true,
       sort_order: 99,
     });
-    if (error) alert(error.message);
+    if (error) appAlert(error.message);
     else {
       await supabase.rpc('log_admin_action', {
         p_action: 'create_featured_collection',

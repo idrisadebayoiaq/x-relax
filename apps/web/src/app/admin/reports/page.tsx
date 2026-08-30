@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/auth-context';
+import { appAlert } from '@/components/AppDialog';
 
 type Report = {
   id: string;
@@ -35,7 +36,7 @@ export default function AdminReportsPage() {
       p_status: status,
       p_admin_note: null,
     });
-    if (error) alert(error.message);
+    if (error) appAlert(error.message);
     else void load();
   };
 

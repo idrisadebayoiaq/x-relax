@@ -1,13 +1,13 @@
 import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   Pressable,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -16,6 +16,8 @@ import { useAuth } from '../auth/AuthProvider';
 import { supabase } from '../../lib/supabase';
 import { EmptyBlock } from '../../ui/Screen';
 import type { PaymentRequest, PaymentStatus } from '../../types/database';
+import { appAlert } from '../../ui/appAlert';
+
 
 export function AdminPaymentsScreen() {
   const { colors, isDark } = useAppTheme();
@@ -50,10 +52,10 @@ export function AdminPaymentsScreen() {
     });
     setBusyId(null);
     if (error) {
-      Alert.alert('Review failed', error.message);
+      appAlert('Review failed', error.message);
       return;
     }
-    Alert.alert('Updated', `Payment marked ${status}`);
+    appAlert('Updated', `Payment marked ${status}`);
     await refreshProfile();
     load();
   };

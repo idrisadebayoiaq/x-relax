@@ -1,19 +1,27 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/auth-context';
 import { useWebTheme, type ThemePreference } from '@/lib/theme-context';
 import { useWebSettings, type AudioQuality, type DownloadNetworkMode } from '@/lib/settings-context';
+import { appAlert, appConfirm } from '@/components/AppDialog';
+import { setWebPushEnabled } from '@/lib/web-push';
 
 export default function SettingsPage() {
-  const { user, profile, isPremium, isCreator, isAdmin, signOut } = useAuth();
+  const { user, profile, isPremium, isCreator, isAdmin, signOut, refreshProfile } = useAuth();
   const { preference, setPreference } = useWebTheme();
   const { settings, updateSettings } = useWebSettings();
   const [apkUrl, setApkUrl] = useState('');
   const [busyDelete, setBusyDelete] = useState(false);
-  const version = '1.0.11';
+  const [pushOn, setPushOn] = useState(profile?.push_enabled !== false);
+  const [pushBusy, setPushBusy] = useState(false);
+  const version = '1.0.13';
+
+  useEffect(() => {
+    setPushOn(profile?.push_enabled !== false);
+  }, [profile?.push_enabled]);
 
   const loadApk = async () => {
     const { data } = await createClient()
@@ -27,14 +35,14 @@ export default function SettingsPage() {
   };
 
   const deleteAccount = async () => {
-    if (!confirm('Delete your account permanently? This cannot be undone.')) return;
-    if (!confirm('Final confirmation: delete account forever?')) return;
+    if (!(await appConfirm('Delete account', 'This permanently deletes your account and data. This cannot be undone.'))) return;
+    if (!(await appConfirm('Confirm delete', 'Final confirmation: delete account forever?'))) return;
     setBusyDelete(true);
     const { data, error } = await createClient().rpc('delete_own_account');
     setBusyDelete(false);
     const payload = data as { ok?: boolean; error?: string } | null;
     if (error || !payload?.ok) {
-      alert(payload?.error ?? error?.message ?? 'Could not delete account');
+      appAlert('Could not delete', payload?.error ?? error?.message ?? 'Try again or contact support.');
       return;
     }
     await signOut();
@@ -66,6 +74,35 @@ export default function SettingsPage() {
             {preference === key ? ' ✓' : ''}
           </button>
         ))}
+      </Section>
+
+      <Section title="Notifications">
+        <button
+          type="button"
+          disabled={pushBusy}
+          className="w-full text-left px-4 py-3 hover:bg-background/60 flex items-center justify-between gap-4"
+          onClick={async () => {
+            const next = !pushOn;
+            setPushOn(next);
+            setPushBusy(true);
+            const { error } = await setWebPushEnabled(next);
+            setPushBusy(false);
+            if (error) {
+              setPushOn(!next);
+              appAlert('Notifications', error);
+              return;
+            }
+            await refreshProfile();
+          }}
+        >
+          <span>
+            <span className="block font-semibold">Push notifications</span>
+            <span className="block text-xs text-muted mt-0.5">
+              {pushOn ? 'On — stays on until you turn it off' : 'Off — browser alerts are paused'}
+            </span>
+          </span>
+          <span className="text-sm font-semibold">{pushOn ? 'On' : 'Off'}</span>
+        </button>
       </Section>
 
       <Section title="Volume">
@@ -127,7 +164,7 @@ export default function SettingsPage() {
 
       <Section title="Account">
         <Link href="/premium" className="block px-4 py-3 border-b border-border hover:bg-background/60">
-          Premium & plan {isPremium ? '· Active' : ''}
+          Premium & plan {isPremium ? '· Active · plans hidden until due' : ''}
         </Link>
         <Link href="/payments" className="block px-4 py-3 border-b border-border hover:bg-background/60">
           My payments
@@ -165,9 +202,9 @@ export default function SettingsPage() {
                   .maybeSingle()
               ).data?.download_url ||
               '';
-            if (!url) return alert('No download link available');
+            if (!url) return appAlert('Share app', 'No download link available');
             await navigator.clipboard.writeText(url);
-            alert('APK link copied');
+            appAlert('Share app', 'APK link copied');
           }}
         >
           Share app (copy APK link)
@@ -202,8 +239,8 @@ export default function SettingsPage() {
       <button
         type="button"
         className="w-full rounded-xl border border-border py-3.5 font-semibold"
-        onClick={() => {
-          if (confirm('Sign out of X-Relax?')) void signOut();
+        onClick={async () => {
+          if (await appConfirm('Sign out', 'Sign out of X-Relax?')) void signOut();
         }}
       >
         Sign out

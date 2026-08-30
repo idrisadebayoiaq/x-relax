@@ -24,6 +24,8 @@ import { useAuth } from './src/features/auth/AuthProvider';
 import { useAppTheme } from './src/lib/useAppTheme';
 import { isSupabaseConfigured } from './src/lib/supabase';
 import { recordAppOpen } from './src/lib/analytics';
+import { DownloadProvider } from './src/features/downloads/DownloadProvider';
+import { DownloadBanner } from './src/features/downloads/DownloadBanner';
 
 SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
@@ -86,6 +88,8 @@ function AppShell() {
     <>
       <RootNavigator />
       {session ? <SleepTimeScheduler /> : null}
+      {session ? <DownloadBanner /> : null}
+      <AppDialogHost />
       <StatusBar style={isDark ? 'light' : 'dark'} />
     </>
   );
@@ -117,7 +121,9 @@ export default function App() {
               <AppSettingsProvider>
                 <PlayerProvider>
                   <MixProvider>
-                    <AppShell />
+                    <DownloadProvider>
+                      <AppShell />
+                    </DownloadProvider>
                   </MixProvider>
                 </PlayerProvider>
               </AppSettingsProvider>

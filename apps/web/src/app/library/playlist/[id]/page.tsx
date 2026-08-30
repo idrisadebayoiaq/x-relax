@@ -9,15 +9,13 @@ import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/auth-context';
 import { usePlayer } from '@/lib/player-context';
 import type { Playlist, Sound } from '@/types/database';
-
-const MIX_SOUND_PREFIX = '__xrelax_mix__:';
-
-function mixIdFromSound(sound: Sound): string | null {
-  const desc = sound.description ?? '';
-  if (!desc.startsWith(MIX_SOUND_PREFIX)) return null;
-  const id = desc.slice(MIX_SOUND_PREFIX.length).trim();
-  return id || null;
-}
+import { appAlert, appConfirm } from '@/components/AppDialog';
+import {
+  deletePlaylist,
+  isRenderedMixSound,
+  mixIdFromSound,
+  removePlaylistItem,
+} from '@/lib/library-actions';
 
 export default function PlaylistDetailPage() {
   const params = useParams<{ id: string }>();
@@ -70,13 +68,13 @@ export default function PlaylistDetailPage() {
       .update({ visibility: next, updated_at: new Date().toISOString() })
       .eq('id', playlist.id);
     setBusy(false);
-    if (error) alert(error.message);
+    if (error) appAlert(error.message);
     else setPlaylist({ ...playlist, visibility: next });
   };
 
   const openOrPlay = async (sound: Sound, index: number) => {
-    const mixId = mixIdFromSound(sound);
-    if (mixId) {
+    const mixId = mixIdFromSound(sound.description);
+    if (mixId && !isRenderedMixSound(sound)) {
       router.push(`/mix?mixId=${encodeURIComponent(mixId)}`);
       return;
     }
@@ -106,14 +104,29 @@ export default function PlaylistDetailPage() {
           ‹
         </Link>
         {isOwner ? (
-          <button
-            type="button"
-            className="chip"
-            disabled={busy}
-            onClick={() => void toggleVisibility()}
-          >
-            {playlist?.visibility === 'public' ? 'Public' : 'Private'}
-          </button>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className="chip text-red-600"
+              onClick={async () => {
+                if (!playlist || !user) return;
+                if (!(await appConfirm('Delete playlist', `Delete "${playlist.title}" permanently?`))) return;
+                const { error } = await deletePlaylist(user.id, playlist.id);
+                if (error) appAlert('Could not delete', error);
+                else router.push('/library');
+              }}
+            >
+              Delete
+            </button>
+            <button
+              type="button"
+              className="chip"
+              disabled={busy}
+              onClick={() => void toggleVisibility()}
+            >
+              {playlist?.visibility === 'public' ? 'Public' : 'Private'}
+            </button>
+          </div>
         ) : (
           <span />
         )}
@@ -144,12 +157,12 @@ export default function PlaylistDetailPage() {
       <ul className="divide-y divide-border">
         {sounds.map((sound, index) => {
           const active = current?.id === sound.id;
-          const isMix = !!mixIdFromSound(sound);
+          const isMix = !!mixIdFromSound(sound.description);
           return (
-            <li key={sound.id}>
+            <li key={sound.id} className="flex items-center gap-2">
               <button
                 type="button"
-                className="w-full flex items-center gap-3.5 py-3 text-left"
+                className="flex-1 flex items-center gap-3.5 py-3 text-left"
                 onClick={() => void openOrPlay(sound, index)}
               >
                 <CoverArt title={sound.title} uri={sound.cover_url} size={48} rounded={4} />
@@ -164,6 +177,21 @@ export default function PlaylistDetailPage() {
                 </span>
                 {active && isPlaying ? <span className="text-muted pr-1">❚❚</span> : null}
               </button>
+              {isOwner ? (
+                <button
+                  type="button"
+                  className="chip text-xs"
+                  onClick={async () => {
+                    if (!playlist) return;
+                    if (!(await appConfirm('Remove sound', `Remove "${sound.title}" from this playlist?`))) return;
+                    const { error } = await removePlaylistItem(playlist.id, sound.id);
+                    if (error) appAlert('Could not remove', error);
+                    else setSounds((prev) => prev.filter((s) => s.id !== sound.id));
+                  }}
+                >
+                  Remove
+                </button>
+              ) : null}
             </li>
           );
         })}

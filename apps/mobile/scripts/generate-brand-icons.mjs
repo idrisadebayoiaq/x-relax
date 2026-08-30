@@ -1,117 +1,79 @@
+/**
+ * Generates X-Relax brand icons from theme colors (no external source image).
+ * Run from repo root: node apps/mobile/scripts/generate-brand-icons.mjs
+ */
 import sharp from 'sharp';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const root = path.join(__dirname, '..');
-const outDir = path.join(root, 'assets', 'brand');
+const outDir = path.join(__dirname, '..', 'assets', 'brand');
 
-const src =
-  process.argv[2] ||
-  path.join(
-    process.env.USERPROFILE || '',
-    '.cursor',
-    'projects',
-    'c-Users-DELL-Desktop-x-relax',
-    'assets',
-    'c__Users_DELL_AppData_Roaming_Cursor_User_workspaceStorage_90b20cb2801b79fb953e9b9cd9b9bce6_images_image-f41c6e77-5753-4039-bada-cda61a6e7e90.png',
+const NAVY = '#061428';
+const BLUE = '#0B3D91';
+const GOLD = '#F5C400';
+const GOLD_LIGHT = '#FFD54A';
+
+function brandSvg({ size, variant }) {
+  const pad = size * 0.12;
+  const cx = size / 2;
+  const cy = size / 2;
+  const showBg = variant !== 'foreground' && variant !== 'notification';
+
+  const bg =
+    showBg && variant !== 'splash'
+      ? `<rect width="${size}" height="${size}" rx="${size * 0.22}" fill="${NAVY}"/>
+         <circle cx="${cx}" cy="${cy}" r="${size * 0.36}" fill="${BLUE}" opacity="0.55"/>`
+      : '';
+
+  const splashBg =
+    variant === 'splash' ? `<rect width="${size}" height="${size}" fill="${NAVY}"/>` : '';
+
+  const stroke = variant === 'notification' ? '#FFFFFF' : GOLD;
+  const waveStroke = variant === 'notification' ? '#FFFFFF' : GOLD_LIGHT;
+  const xSize = size * 0.28;
+
+  const xPaths = `
+    <g transform="translate(${cx}, ${cy - size * 0.04})">
+      <path d="M ${-xSize} ${-xSize * 0.9} L ${xSize * 0.15} 0 L ${-xSize} ${xSize * 0.9}"
+            fill="none" stroke="${stroke}" stroke-width="${size * 0.055}" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M ${xSize} ${-xSize * 0.9} L ${-xSize * 0.15} 0 L ${xSize} ${xSize * 0.9}"
+            fill="none" stroke="${stroke}" stroke-width="${size * 0.055}" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+    <path d="M ${pad + size * 0.08} ${size * 0.72}
+             Q ${cx} ${size * 0.62} ${cx + size * 0.12} ${size * 0.72}
+             T ${size - pad - size * 0.08} ${size * 0.72}"
+          fill="none" stroke="${waveStroke}" stroke-width="${size * 0.028}" stroke-linecap="round" opacity="0.9"/>
+    <path d="M ${pad + size * 0.14} ${size * 0.8}
+             Q ${cx} ${size * 0.7} ${cx + size * 0.1} ${size * 0.8}
+             T ${size - pad - size * 0.14} ${size * 0.8}"
+          fill="none" stroke="${waveStroke}" stroke-width="${size * 0.02}" stroke-linecap="round" opacity="0.65"/>
+  `;
+
+  return Buffer.from(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+      ${splashBg}${bg}
+      ${xPaths}
+    </svg>`,
   );
-
-async function whiteOnTransparent(input, size) {
-  const { data, info } = await sharp(input)
-    .resize(size, size, {
-      fit: 'contain',
-      background: { r: 0, g: 0, b: 0, alpha: 0 },
-    })
-    .ensureAlpha()
-    .raw()
-    .toBuffer({ resolveWithObject: true });
-
-  for (let i = 0; i < data.length; i += 4) {
-    const lum = (data[i] + data[i + 1] + data[i + 2]) / 3;
-    if (lum < 40 || data[i + 3] < 20) {
-      data[i] = 0;
-      data[i + 1] = 0;
-      data[i + 2] = 0;
-      data[i + 3] = 0;
-    } else {
-      data[i] = 255;
-      data[i + 1] = 255;
-      data[i + 2] = 255;
-      data[i + 3] = 255;
-    }
-  }
-
-  return sharp(data, {
-    raw: { width: info.width, height: info.height, channels: 4 },
-  })
-    .png()
-    .toBuffer();
 }
 
-async function makeIcon({ size, scale, name, monoWhite = false }) {
-  const logoSize = Math.round(size * scale);
-  const left = Math.round((size - logoSize) / 2);
-  const top = left;
-
-  if (monoWhite) {
-    const logo = await whiteOnTransparent(src, logoSize);
-    const base = await sharp({
-      create: {
-        width: size,
-        height: size,
-        channels: 4,
-        background: { r: 0, g: 0, b: 0, alpha: 0 },
-      },
-    })
-      .png()
-      .toBuffer();
-
-    await sharp(base)
-      .composite([{ input: logo, left, top }])
-      .png()
-      .toFile(path.join(outDir, name));
-    return;
-  }
-
-  const logo = await sharp(src)
-    .resize(logoSize, logoSize, {
-      fit: 'contain',
-      background: { r: 0, g: 0, b: 0, alpha: 1 },
-    })
-    .png()
-    .toBuffer();
-
-  const base = await sharp({
-    create: {
-      width: size,
-      height: size,
-      channels: 3,
-      background: { r: 0, g: 0, b: 0 },
-    },
-  })
-    .png()
-    .toBuffer();
-
-  await sharp(base)
-    .composite([{ input: logo, left, top }])
-    .png()
-    .toFile(path.join(outDir, name));
+async function writePng(name, size, variant) {
+  const svg = brandSvg({ size, variant });
+  await sharp(svg).png().toFile(path.join(outDir, name));
 }
 
-if (!fs.existsSync(src)) {
-  console.error('Source logo not found:', src);
-  process.exit(1);
-}
+fs.mkdirSync(outDir, { recursive: true });
 
-await makeIcon({ size: 1024, scale: 0.52, name: 'app-icon.png' });
-await makeIcon({ size: 1024, scale: 0.42, name: 'splash-icon.png' });
-await makeIcon({ size: 512, scale: 0.55, name: 'favicon.png' });
-await makeIcon({ size: 96, scale: 0.7, name: 'notification-icon.png', monoWhite: true });
-await makeIcon({ size: 1024, scale: 0.7, name: 'icon-master.png' });
+await writePng('app-icon.png', 1024, 'app');
+await writePng('adaptive-foreground.png', 1024, 'foreground');
+await writePng('splash-icon.png', 1024, 'splash');
+await writePng('favicon.png', 512, 'app');
+await writePng('notification-icon.png', 96, 'notification');
+await writePng('icon-master.png', 1024, 'app');
 
-console.log('Wrote brand icons to', outDir);
-for (const f of ['app-icon.png', 'splash-icon.png', 'favicon.png', 'notification-icon.png']) {
+console.log('Wrote themed brand icons to', outDir);
+for (const f of fs.readdirSync(outDir).filter((n) => n.endsWith('.png'))) {
   console.log(f, fs.statSync(path.join(outDir, f)).size);
 }

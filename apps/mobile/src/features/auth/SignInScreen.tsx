@@ -38,9 +38,7 @@ export function SignInScreen({ navigation }: Props) {
     if (result.error) setError(result.error);
   };
 
-  const logo = isDark
-    ? require('../../../assets/brand/splash-icon.png')
-    : require('../../../assets/brand/icon-light.png');
+  const logo = require('../../../assets/brand/splash-icon.png');
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>

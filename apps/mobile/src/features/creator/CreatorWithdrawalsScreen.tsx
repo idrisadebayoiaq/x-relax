@@ -1,7 +1,6 @@
 import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   StyleSheet,
   Text,
@@ -13,6 +12,7 @@ import { useAppTheme } from '../../lib/useAppTheme';
 import { useAuth } from '../auth/AuthProvider';
 import { supabase } from '../../lib/supabase';
 import { EmptyBlock, PrimaryButton, ScreenScaffold, SectionLabel } from '../../ui/Screen';
+import { appAlert } from '../../ui/appAlert';
 
 type Earning = {
   id: string;
@@ -69,7 +69,7 @@ export function CreatorWithdrawalsScreen() {
   const request = async () => {
     const value = Number(amount);
     if (!Number.isFinite(value) || value <= 0) {
-      Alert.alert('Invalid amount');
+      appAlert('Invalid amount');
       return;
     }
     setBusy(true);
@@ -81,10 +81,10 @@ export function CreatorWithdrawalsScreen() {
     });
     setBusy(false);
     if (error) {
-      Alert.alert('Request failed', error.message);
+      appAlert('Request failed', error.message);
       return;
     }
-    Alert.alert('Submitted', 'Finance admin will review your withdrawal.');
+    appAlert('Submitted', 'Finance admin will review your withdrawal.');
     setAmount('');
     load();
   };

@@ -6,6 +6,7 @@ import { formatBytes } from '@/lib/format';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/auth-context';
 import type { AppRelease, AppReleaseStatus } from '@/types/database';
+import { appAlert, appConfirm } from '@/components/AppDialog';
 
 const STATUSES: AppReleaseStatus[] = ['coming_soon', 'available', 'archived'];
 /** Supabase Free global Storage limit is 50MB; APKs are usually larger. */
@@ -54,7 +55,7 @@ export default function AdminReleasesPage() {
 
   const saveRelease = async () => {
     if (!form.version.trim() || !form.title.trim()) {
-      alert('Version and title are required.');
+      appAlert('Version and title are required.');
       return;
     }
     setBusy(true);
@@ -66,7 +67,7 @@ export default function AdminReleasesPage() {
     if (apkFile) {
       if (apkFile.size > MAX_DIRECT_UPLOAD_BYTES) {
         setBusy(false);
-        return alert(
+        return appAlert(
           `This APK is ${formatBytes(apkFile.size)}. Direct uploads are limited (~50MB on Free plans).\n\nPaste the Expo APK download link in “APK download URL” instead, or raise the global Storage file size limit in the Supabase dashboard (Pro).`,
         );
       }
@@ -81,7 +82,7 @@ export default function AdminReleasesPage() {
         });
       if (uploadError) {
         setBusy(false);
-        return alert(uploadError.message || 'APK upload failed.');
+        return appAlert(uploadError.message || 'APK upload failed.');
       }
       fileSize = apkFile.size;
     }
@@ -100,11 +101,11 @@ export default function AdminReleasesPage() {
     if (editingId) {
       const { error } = await supabase.from('app_releases').update(payload).eq('id', editingId);
       setBusy(false);
-      if (error) return alert(error.message);
+      if (error) return appAlert(error.message);
     } else {
       const { error } = await supabase.from('app_releases').insert(payload);
       setBusy(false);
-      if (error) return alert(error.message);
+      if (error) return appAlert(error.message);
     }
 
     resetForm();
@@ -125,9 +126,9 @@ export default function AdminReleasesPage() {
   };
 
   const deleteRelease = async (id: string) => {
-    if (!confirm('Delete this release entry?')) return;
+    if (!(await appConfirm('Delete this release entry?'))) return;
     const { error } = await createClient().from('app_releases').delete().eq('id', id);
-    if (error) alert(error.message);
+    if (error) appAlert(error.message);
     else void load();
   };
 

@@ -12,6 +12,7 @@ import { moodPaletteFor } from '@/lib/format';
 import { useAuth } from '@/lib/auth-context';
 import { usePlayer } from '@/lib/player-context';
 import type { Sound } from '@/types/database';
+import { appAlert } from '@/components/AppDialog';
 
 type CreatorPublicProfile = {
   id: string;
@@ -109,7 +110,7 @@ export default function CreatorPublicProfilePage() {
     });
     if (uploadError) {
       setBannerBusy(false);
-      alert(uploadError.message);
+      appAlert(uploadError.message);
       return;
     }
     const { data: pub } = supabase.storage.from('covers').getPublicUrl(path);
@@ -120,7 +121,7 @@ export default function CreatorPublicProfilePage() {
       .eq('user_id', user.id);
     setBannerBusy(false);
     if (updateError) {
-      alert(updateError.message);
+      appAlert(updateError.message);
       return;
     }
     await loadProfile();

@@ -7,6 +7,8 @@ import { AuthProvider } from '@/lib/auth-context';
 import { PlayerProvider } from '@/lib/player-context';
 import { ThemeProvider } from '@/lib/theme-context';
 import { WebSettingsProvider } from '@/lib/settings-context';
+import { AppDialogHost } from '@/components/AppDialog';
+import { WebNotificationListener } from '@/components/WebNotificationListener';
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
@@ -17,7 +19,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
             <PlayerProvider>
               <ServiceWorkerRegister />
               <AnalyticsBeacon />
+              <WebNotificationListener />
               {children}
+              <AppDialogHost />
             </PlayerProvider>
           </OfflineProvider>
         </WebSettingsProvider>

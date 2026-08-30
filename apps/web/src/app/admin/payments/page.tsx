@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/auth-context';
 import type { PaymentRequest, PaymentStatus } from '@/types/database';
+import { appAlert } from '@/components/AppDialog';
 
 export default function AdminPaymentsPage() {
   const { isAdmin, refreshProfile } = useAuth();
@@ -40,7 +41,7 @@ export default function AdminPaymentsPage() {
       });
       await refreshProfile();
       void load();
-    } else alert(error.message);
+    } else appAlert(error.message);
     setBusyId(null);
   };
 

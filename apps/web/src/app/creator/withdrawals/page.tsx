@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/auth-context';
+import { appAlert } from '@/components/AppDialog';
 
 type Withdrawal = {
   id: string;
@@ -47,7 +48,7 @@ export default function CreatorWithdrawalsPage() {
       status: 'pending',
     });
     setBusy(false);
-    if (error) alert(error.message);
+    if (error) appAlert(error.message);
     else {
       setAmount('');
       void load();

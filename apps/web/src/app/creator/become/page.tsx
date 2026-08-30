@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/auth-context';
+import { appAlert } from '@/components/AppDialog';
 
 export default function BecomeCreatorPage() {
   const router = useRouter();
@@ -21,7 +22,7 @@ export default function BecomeCreatorPage() {
       p_payout_method: payoutMethod.trim() || null,
     });
     setBusy(false);
-    if (error) return alert(error.message);
+    if (error) return appAlert(error.message);
     await refreshProfile();
     router.push('/creator');
   };

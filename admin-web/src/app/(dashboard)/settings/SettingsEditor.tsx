@@ -3,6 +3,8 @@
 import { FormEvent, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { appAlert } from '@/components/AppDialog';
+
 
 export function SettingsEditor({
   settingKey,
@@ -24,7 +26,7 @@ export function SettingsEditor({
         value: parsed,
         updated_at: new Date().toISOString(),
       });
-      if (error) alert(error.message);
+      if (error) appAlert(error.message);
       else {
         await supabase.rpc('log_admin_action', {
           p_action: 'update_app_settings',
@@ -32,10 +34,10 @@ export function SettingsEditor({
           p_meta: { key: settingKey },
         });
         router.refresh();
-        alert('Saved');
+        appAlert('Saved');
       }
     } catch {
-      alert('Invalid JSON');
+      appAlert('Invalid JSON');
     }
   };
 

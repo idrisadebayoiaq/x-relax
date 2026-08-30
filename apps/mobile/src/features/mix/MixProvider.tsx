@@ -8,7 +8,6 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { Alert } from 'react-native';
 import {
   addMixTrackLive,
   isMixPlaying as layersArePlaying,
@@ -24,9 +23,12 @@ import {
   type MixLayer,
 } from '../../lib/mixPlayback';
 import { supabase } from '../../lib/supabase';
+import { renderMixLayersToWav } from '../../lib/mixRender';
 import type { Mix, Sound } from '../../types/database';
 import { useAuth } from '../auth/AuthProvider';
 import { usePlayer } from '../player/PlayerProvider';
+import { appAlert } from '../../ui/appAlert';
+import { ensureMyMixPlaylist } from '../../lib/ensureMyMixPlaylist';
 
 export type SavedMix = Mix & {
   visibility?: string | null;
@@ -68,7 +70,7 @@ const MY_MIX_PLAYLIST = 'My Mix';
 
 export function MixProvider({ children }: { children: ReactNode }) {
   const { user, canUseMixes, freeMixLimit, isPremium, isAdmin, premiumMixLimit } = useAuth();
-  const { stopPlayback } = usePlayer();
+  const { stopPlayback, playSound } = usePlayer();
 
   const [layers, setLayers] = useState<MixLayer[]>([]);
   const [mixId, setMixId] = useState<string | null>(null);
@@ -179,16 +181,16 @@ export function MixProvider({ children }: { children: ReactNode }) {
   const addSound = useCallback(
     async (sound: Sound, volume = DEFAULT_VOLUME) => {
       if (!canUseMixes) {
-        Alert.alert('Premium feature', 'Mix Sounds is available for Premium listeners.');
+        appAlert('Premium feature', 'Mix Sounds is available for Premium listeners.');
         return false;
       }
       if (!sound.audio_url) {
-        Alert.alert('Unavailable', 'This sound has no audio file.');
+        appAlert('Unavailable', 'This sound has no audio file.');
         return false;
       }
       if (layersRef.current.some((l) => l.sound.id === sound.id)) return false;
       if (layersRef.current.length >= maxTracks) {
-        Alert.alert('Limit reached', `You can mix up to ${maxTracks} sounds.`);
+        appAlert('Limit reached', `You can mix up to ${maxTracks} sounds.`);
         return false;
       }
 
@@ -233,11 +235,11 @@ export function MixProvider({ children }: { children: ReactNode }) {
 
   const playMix = useCallback(async () => {
     if (!canUseMixes) {
-      Alert.alert('Premium feature', 'Mix Sounds is available for Premium listeners.');
+      appAlert('Premium feature', 'Mix Sounds is available for Premium listeners.');
       return false;
     }
     if (!layersRef.current.length) {
-      Alert.alert('Empty mix', 'Add at least one sound to your mix.');
+      appAlert('Empty mix', 'Add at least one sound to your mix.');
       return false;
     }
 
@@ -257,7 +259,7 @@ export function MixProvider({ children }: { children: ReactNode }) {
 
     const started = await startMixLayers(layersRef.current, titleRef.current);
     if (!started.length) {
-      Alert.alert('Playback failed', 'Could not start the selected sounds.');
+      appAlert('Playback failed', 'Could not start the selected sounds.');
       return false;
     }
     setLayers(started);
@@ -288,7 +290,7 @@ export function MixProvider({ children }: { children: ReactNode }) {
   const loadSavedMix = useCallback(
     async (mix: SavedMix, autoPlay = false) => {
       if (!canUseMixes) {
-        Alert.alert('Premium feature', 'Mix Sounds is available for Premium listeners.');
+        appAlert('Premium feature', 'Mix Sounds is available for Premium listeners.');
         return false;
       }
       stopMix();
@@ -300,7 +302,7 @@ export function MixProvider({ children }: { children: ReactNode }) {
         }))
         .filter((l) => !!l.sound?.audio_url);
       if (!nextLayers.length) {
-        Alert.alert('Mix unavailable', 'This mix has no playable sounds.');
+        appAlert('Mix unavailable', 'This mix has no playable sounds.');
         return false;
       }
       setMixId(mix.id);
@@ -329,42 +331,39 @@ export function MixProvider({ children }: { children: ReactNode }) {
     [canUseMixes, stopMix, stopPlayback, setMixTitle],
   );
 
-  const ensureMyMixPlaylist = useCallback(async (userId: string) => {
-    const { data: existing } = await supabase
-      .from('playlists')
-      .select('id')
-      .eq('user_id', userId)
-      .eq('title', MY_MIX_PLAYLIST)
-      .maybeSingle();
-    if (existing?.id) return existing.id as string;
-    const { data: created, error } = await supabase
-      .from('playlists')
-      .insert({ user_id: userId, title: MY_MIX_PLAYLIST })
-      .select('id')
-      .single();
-    if (error || !created) throw new Error(error?.message ?? 'Could not create My Mix playlist');
-    return created.id as string;
-  }, []);
+  const clearMix = useCallback(() => {
+    stopMix();
+    setLayers([]);
+    layersRef.current = [];
+    setMixId(null);
+    setMixTitle('My Mix');
+    setSessionElapsedSec(0);
+    sessionElapsedRef.current = 0;
+    setSavedDurationSec(null);
+    savedDurationRef.current = null;
+    setLinkedSoundId(null);
+    replayElapsedRef.current = 0;
+  }, [stopMix, setMixTitle]);
 
   const saveMix = useCallback(
     async (titleOverride?: string) => {
       if (!user) {
-        Alert.alert('Sign in', 'Sign in to save mixes.');
+        appAlert('Sign in', 'Sign in to save mixes.');
         return null;
       }
       if (!canUseMixes) {
-        Alert.alert('Premium feature', 'Saving mixes requires Premium.');
+        appAlert('Premium feature', 'Saving mixes requires Premium.');
         return null;
       }
       if (!layersRef.current.length) {
-        Alert.alert('Empty mix', 'Add sounds before saving.');
+        appAlert('Empty mix', 'Add sounds before saving.');
         return null;
       }
 
       flushTick();
       const playedSec = Math.floor(sessionElapsedRef.current);
       if (playedSec <= 0 && !savedDurationRef.current) {
-        Alert.alert(
+        appAlert(
           'Play first',
           'Start your mix and let it play for a bit, then save. The duration becomes the length of your mix.',
         );
@@ -375,8 +374,32 @@ export function MixProvider({ children }: { children: ReactNode }) {
       setMixTitle(title);
       const durationSeconds = Math.max(playedSec, savedDurationRef.current ?? 0, 1);
       const coverUrl = layersRef.current[0]?.sound.cover_url ?? null;
-      const proxyAudioUrl = layersRef.current[0]?.sound.audio_url ?? null;
-      const proxyAudioPath = layersRef.current[0]?.sound.audio_path ?? null;
+      const layersSnapshot = [...layersRef.current];
+
+      stopMix();
+
+      let renderedUrl: string | null = null;
+      let renderedPath: string | null = null;
+      try {
+        const wav = await renderMixLayersToWav(layersSnapshot, durationSeconds);
+        const storagePath = `${user.id}/mix-renders/${mixId ?? 'new'}-${Date.now()}.wav`;
+        const { error: uploadError } = await supabase.storage
+          .from('sounds')
+          .upload(storagePath, wav, { upsert: true, contentType: 'audio/wav' });
+        if (uploadError) {
+          appAlert('Upload failed', uploadError.message);
+          return null;
+        }
+        const { data: pub } = supabase.storage.from('sounds').getPublicUrl(storagePath);
+        renderedUrl = `${pub.publicUrl}?v=${Date.now()}`;
+        renderedPath = storagePath;
+      } catch (err) {
+        appAlert(
+          'Could not render mix',
+          err instanceof Error ? err.message : 'Connect to the internet and try again.',
+        );
+        return null;
+      }
 
       let id = mixId;
       if (id) {
@@ -390,7 +413,7 @@ export function MixProvider({ children }: { children: ReactNode }) {
           .eq('id', id)
           .eq('user_id', user.id);
         if (error) {
-          Alert.alert('Save failed', error.message);
+          appAlert('Save failed', error.message);
           return null;
         }
         await supabase.from('mix_tracks').delete().eq('mix_id', id);
@@ -405,14 +428,14 @@ export function MixProvider({ children }: { children: ReactNode }) {
           .select('id')
           .single();
         if (error || !data) {
-          Alert.alert('Save failed', error?.message ?? 'Could not create mix.');
+          appAlert('Save failed', error?.message ?? 'Could not create mix.');
           return null;
         }
         id = data.id as string;
         setMixId(id);
       }
 
-      const rows = layersRef.current.map((layer, index) => ({
+      const rows = layersSnapshot.map((layer, index) => ({
         mix_id: id,
         sound_id: layer.sound.id,
         volume: layer.volume,
@@ -420,7 +443,7 @@ export function MixProvider({ children }: { children: ReactNode }) {
       }));
       const { error: trackErr } = await supabase.from('mix_tracks').insert(rows);
       if (trackErr) {
-        Alert.alert('Save failed', trackErr.message);
+        appAlert('Save failed', trackErr.message);
         return null;
       }
 
@@ -432,8 +455,8 @@ export function MixProvider({ children }: { children: ReactNode }) {
         title,
         description: desc,
         cover_url: coverUrl,
-        audio_url: proxyAudioUrl,
-        audio_path: proxyAudioPath,
+        audio_url: renderedUrl,
+        audio_path: renderedPath,
         duration_seconds: durationSeconds,
         status: 'draft' as const,
         updated_at: new Date().toISOString(),
@@ -457,7 +480,7 @@ export function MixProvider({ children }: { children: ReactNode }) {
           .select('id')
           .single();
         if (soundErr || !soundRow) {
-          Alert.alert(
+          appAlert(
             'Mix saved',
             `"${title}" is in Library → My Mixes, but playlist link failed: ${soundErr?.message ?? 'unknown'}`,
           );
@@ -476,7 +499,7 @@ export function MixProvider({ children }: { children: ReactNode }) {
         .eq('id', id);
 
       try {
-        const playlistId = await ensureMyMixPlaylist(user.id);
+        const playlistId = await ensureMyMixPlaylist();
         await supabase.from('playlist_items').upsert(
           {
             playlist_id: playlistId,
@@ -492,9 +515,22 @@ export function MixProvider({ children }: { children: ReactNode }) {
       setSavedDurationSec(durationSeconds);
       savedDurationRef.current = durationSeconds;
       setMixSessionMeta({ id, title });
-      Alert.alert(
+
+      const { data: savedSound } = await supabase
+        .from('sounds')
+        .select('*')
+        .eq('id', soundId)
+        .maybeSingle();
+
+      clearMix();
+
+      if (savedSound) {
+        await playSound(savedSound as Sound, { queueLabel: 'My Mix' });
+      }
+
+      appAlert(
         'Saved to My Mix',
-        `"${title}" · ${Math.floor(durationSeconds / 60)}:${String(durationSeconds % 60).padStart(2, '0')} — find it in Library → My Mixes and playlist “My Mix”.`,
+        `"${title}" is now one sound in playlist “My Mix”.`,
       );
       return id;
     },
@@ -505,23 +541,11 @@ export function MixProvider({ children }: { children: ReactNode }) {
       setMixTitle,
       flushTick,
       linkedSoundId,
-      ensureMyMixPlaylist,
+      stopMix,
+      clearMix,
+      playSound,
     ],
   );
-
-  const clearMix = useCallback(() => {
-    stopMix();
-    setLayers([]);
-    layersRef.current = [];
-    setMixId(null);
-    setMixTitle('My Mix');
-    setSessionElapsedSec(0);
-    sessionElapsedRef.current = 0;
-    setSavedDurationSec(null);
-    savedDurationRef.current = null;
-    setLinkedSoundId(null);
-    replayElapsedRef.current = 0;
-  }, [stopMix, setMixTitle]);
 
   const setSleepTimerMinutes = useCallback(
     (minutes: number | null) => {
@@ -531,7 +555,7 @@ export function MixProvider({ children }: { children: ReactNode }) {
         return;
       }
       if (!isPremium && !isAdmin) {
-        Alert.alert('Premium feature', 'Sleep timer is available for Premium listeners.');
+        appAlert('Premium feature', 'Sleep timer is available for Premium listeners.');
         return;
       }
       const endsAt = Date.now() + minutes * 60_000;

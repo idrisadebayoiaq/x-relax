@@ -2,6 +2,7 @@
 
 import { ActionButton } from '@/components/ActionButton';
 import { createClient } from '@/lib/supabase/client';
+import { appAlert } from '@/components/AppDialog';
 
 export function ModerationActions({ id }: { id: string }) {
   const review = async (status: 'published' | 'rejected') => {
@@ -11,7 +12,7 @@ export function ModerationActions({ id }: { id: string }) {
       p_status: status,
       p_reason: status === 'rejected' ? 'Did not meet quality or policy guidelines' : null,
     });
-    if (error) alert(error.message);
+    if (error) appAlert(error.message);
     else {
       await supabase.rpc('log_admin_action', {
         p_action: 'moderate_sound',

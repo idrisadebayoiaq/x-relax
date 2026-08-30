@@ -3,6 +3,8 @@
 import { FormEvent, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { appAlert } from '@/components/AppDialog';
+
 
 export function DailyPickForm({
   sounds,
@@ -22,7 +24,7 @@ export function DailyPickForm({
       value: JSON.parse(JSON.stringify(soundId)),
       updated_at: new Date().toISOString(),
     });
-    if (error) alert(error.message);
+    if (error) appAlert(error.message);
     else {
       await supabase.rpc('log_admin_action', {
         p_action: 'set_daily_pick',

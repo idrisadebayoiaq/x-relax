@@ -10,22 +10,13 @@ import {
 } from '@/lib/sleep-time';
 import { useAuth } from '@/lib/auth-context';
 import { usePlayer } from '@/lib/player-context';
+import { showWebNotification } from '@/lib/web-push';
 import type { Sound } from '@/types/database';
 
 const POLL_MS = 25_000;
 
-async function showSleepNotification(body: string) {
-  if (typeof window === 'undefined' || !('Notification' in window)) return;
-  try {
-    if (Notification.permission === 'default') {
-      await Notification.requestPermission();
-    }
-    if (Notification.permission === 'granted') {
-      new Notification('Sleep Time', { body, icon: '/favicon.ico' });
-    }
-  } catch (err) {
-    console.warn('Sleep Time notification failed', err);
-  }
+function showSleepNotification(body: string) {
+  showWebNotification('Sleep Time', body);
 }
 
 export function SleepTimeWatcher() {

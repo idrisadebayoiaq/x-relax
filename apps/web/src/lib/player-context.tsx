@@ -26,6 +26,7 @@ import {
 } from '@/lib/audioSession';
 import { useAuth } from '@/lib/auth-context';
 import type { Sound } from '@/types/database';
+import { appAlert } from '@/components/AppDialog';
 
 export type PlaySoundOptions = {
   queue?: Sound[];
@@ -374,12 +375,12 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
       if (!isOnline()) {
         if (!canDownloadOffline) {
-          alert('Internet required. Free accounts need a connection to listen.');
+          appAlert('Internet required. Free accounts need a connection to listen.');
           return false;
         }
         const offlineUrl = await getOfflineAudioUrl(sound.id);
         if (!offlineUrl) {
-          alert('Not downloaded. Save this sound from the player while online first.');
+          appAlert('Not downloaded. Save this sound from the player while online first.');
           return false;
         }
         // Offline Premium: still respect daily unlocks if somehow not unlimited.
@@ -389,7 +390,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
           hasUnlimitedListening,
         );
         if (!claimOffline.allowed) {
-          alert(DAILY_LIMIT_MESSAGE);
+          appAlert(DAILY_LIMIT_MESSAGE);
           return false;
         }
         const unlockedOffline = await getTodayPlayedSoundIds(user?.id ?? null);
@@ -401,7 +402,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
           hasUnlimitedListening,
         );
         if (!playableQueue.some((item) => item.id === sound.id)) {
-          alert(DAILY_LIMIT_MESSAGE);
+          appAlert(DAILY_LIMIT_MESSAGE);
           return false;
         }
         const index = Math.max(0, playableQueue.findIndex((item) => item.id === sound.id));
@@ -421,7 +422,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       if (!skipDailyClaim) {
         const claim = await claimDailySoundPlay(userId, sound.id, hasUnlimitedListening);
         if (!claim.allowed) {
-          alert(DAILY_LIMIT_MESSAGE);
+          appAlert(DAILY_LIMIT_MESSAGE);
           return false;
         }
       }
@@ -437,7 +438,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       );
       if (!playableQueue.some((item) => item.id === sound.id)) {
         if (!skipDailyClaim) {
-          alert(DAILY_LIMIT_MESSAGE);
+          appAlert(DAILY_LIMIT_MESSAGE);
           return false;
         }
       }

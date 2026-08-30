@@ -22,6 +22,7 @@ import { downloadSoundForWeb, removeDownloadForWeb } from '@/lib/web-downloads';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/auth-context';
 import { usePlayer } from '@/lib/player-context';
+import { appAlert } from '@/components/AppDialog';
 
 function formatSleep(totalSec: number) {
   const m = Math.floor(totalSec / 60);
@@ -120,23 +121,23 @@ export default function PlayerPage() {
   const toggleDownload = async () => {
     if (!user) return;
     if (!canDownloadOffline) {
-      alert('Offline downloads require Premium or admin access.');
+      appAlert('Offline downloads require Premium or admin access.');
       return;
     }
     setDownloadBusy(true);
     if (downloaded) {
       const result = await removeDownloadForWeb(user.id, current.id);
       setDownloadBusy(false);
-      if (!result.ok) alert(result.message);
+      if (!result.ok) appAlert(result.message);
       else setDownloaded(false);
       return;
     }
     const result = await downloadSoundForWeb(user.id, current);
     setDownloadBusy(false);
-    if (!result.ok) alert(result.message);
+    if (!result.ok) appAlert(result.message);
     else {
       setDownloaded(true);
-      alert(result.message);
+      appAlert(result.message);
     }
   };
 

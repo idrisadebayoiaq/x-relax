@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/auth-context';
+import { appConfirm } from '@/components/AppDialog';
 
 type Message = {
   id: string;
@@ -47,7 +48,7 @@ export default function AdminSupportDetailPage() {
   const sendReply = async () => {
     if (!user || !reply.trim()) return;
     if (!isVerifiedAdmin) {
-      const ok = confirm(
+      const ok = await appConfirm(
         'Warning: your admin account is not blue-verified. The user will see a warning on this message. Continue?',
       );
       if (!ok) return;

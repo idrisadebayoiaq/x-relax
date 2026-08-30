@@ -1,13 +1,13 @@
 import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   Pressable,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -19,6 +19,8 @@ import { EmptyBlock } from '../../ui/Screen';
 import { IconButton } from '../../ui/Icon';
 import { Ionicons } from '@expo/vector-icons';
 import type { Sound } from '../../types/database';
+import { appAlert } from '../../ui/appAlert';
+
 
 export function AdminModerationScreen() {
   const { colors, isDark } = useAppTheme();
@@ -50,7 +52,7 @@ export function AdminModerationScreen() {
       p_status: status,
       p_reason: status === 'rejected' ? 'Did not meet quality or policy guidelines' : null,
     });
-    if (error) Alert.alert('Failed', error.message);
+    if (error) appAlert('Failed', error.message);
     else load();
   };
 

@@ -1,4 +1,4 @@
-﻿import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useEffect, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,6 +8,8 @@ import { useMix } from '../features/mix/MixProvider';
 import { CoverArt } from '../features/home/CoverArt';
 import { supabase } from '../lib/supabase';
 import { navigationRef } from './navigationRef';
+import { useAudioOutputRoute } from '../lib/useAudioOutputRoute';
+import { AudioOutputBadge } from '../features/player/components/AudioOutputBadge';
 import type { RootStackParamList } from './types';
 
 type Props = {
@@ -24,10 +26,11 @@ function navigateTo<Name extends keyof RootStackParamList>(
   navigationRef.navigate(name, params);
 }
 
-/** Mini-player — dismissible; resumes paused position after app reopen. */
+/** Mini-player — expandable, minimizable; resumes paused position after app reopen. */
 export function MiniPlayer({ bottomOffset = 0, floating = false }: Props) {
   const { colors } = useAppTheme();
   const insets = useSafeAreaInsets();
+  const audioRoute = useAudioOutputRoute();
   const {
     current,
     isPlaying,
@@ -38,6 +41,8 @@ export function MiniPlayer({ bottomOffset = 0, floating = false }: Props) {
     hasPrevious,
     queueLabel,
     dismissMiniPlayer,
+    isMiniPlayerMinimized,
+    minimizeMiniPlayer,
   } = usePlayer();
   const { isMixActive, isMixPlaying, layers, mixTitle, mixId, toggleMixPlay } = useMix();
   const [creatorName, setCreatorName] = useState<string | null>(null);
@@ -77,31 +82,61 @@ export function MiniPlayer({ bottomOffset = 0, floating = false }: Props) {
       : null,
   ];
 
+  const renderMinimized = (title: string, onExpand: () => void, onToggle: () => void, playing: boolean) => (
+    <View style={wrapStyle} pointerEvents="box-none">
+      <View style={[styles.miniChip, { backgroundColor: colors.elevated, borderColor: colors.border }]}>
+        <Pressable onPress={onExpand} style={styles.miniMain}>
+          <CoverArt title={title} uri={current?.cover_url ?? layers[0]?.sound.cover_url} size={32} rounded={8} />
+          <View style={styles.miniCopy}>
+            <Text style={[styles.miniTitle, { color: colors.text }]} numberOfLines={1}>
+              {title}
+            </Text>
+            <AudioOutputBadge route={audioRoute} colors={colors} compact />
+          </View>
+        </Pressable>
+        <Pressable
+          onPress={() => void onToggle()}
+          hitSlop={6}
+          style={[styles.miniPlay, { backgroundColor: colors.inverse }]}
+        >
+          <Ionicons
+            name={playing ? 'pause' : 'play'}
+            size={16}
+            color={colors.inverseText}
+            style={playing ? undefined : { marginLeft: 2 }}
+          />
+        </Pressable>
+        <Pressable onPress={onExpand} hitSlop={8} style={styles.ctrlHit}>
+          <Ionicons name="chevron-up" size={18} color={colors.textMuted} />
+        </Pressable>
+      </View>
+    </View>
+  );
+
   if (showingMix) {
     const cover = layers[0]?.sound;
     const subtitle = `${layers.length} sound${layers.length === 1 ? '' : 's'}`;
+
+    if (isMiniPlayerMinimized) {
+      return renderMinimized(
+        mixTitle,
+        () => navigateTo('MixStudio', mixId ? { mixId } : undefined),
+        () => void toggleMixPlay(),
+        isMixPlaying,
+      );
+    }
+
     return (
       <View style={wrapStyle} pointerEvents="box-none">
-        <View
-          style={[
-            styles.bar,
-            {
-              backgroundColor: colors.elevated,
-              borderColor: colors.border,
-            },
-          ]}
-        >
+        <View style={[styles.bar, { backgroundColor: colors.elevated, borderColor: colors.border }]}>
           <Pressable
             onPress={() => navigateTo('MixStudio', mixId ? { mixId } : undefined)}
             style={styles.mainHit}
           >
-            <Ionicons name="chevron-up" size={18} color={colors.textMuted} />
-            <CoverArt
-              title={cover?.title ?? mixTitle}
-              uri={cover?.cover_url}
-              size={44}
-              rounded={10}
-            />
+            <Pressable onPress={minimizeMiniPlayer} hitSlop={8} style={styles.ctrlHit}>
+              <Ionicons name="chevron-down" size={18} color={colors.textMuted} />
+            </Pressable>
+            <CoverArt title={cover?.title ?? mixTitle} uri={cover?.cover_url} size={44} rounded={10} />
             <View style={styles.copy}>
               <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>
                 {mixTitle}
@@ -109,6 +144,7 @@ export function MiniPlayer({ bottomOffset = 0, floating = false }: Props) {
               <Text style={[styles.sub, { color: colors.textMuted }]} numberOfLines={1}>
                 Mix · {subtitle}
               </Text>
+              <AudioOutputBadge route={audioRoute} colors={colors} compact />
             </View>
           </Pressable>
           <Pressable
@@ -127,7 +163,7 @@ export function MiniPlayer({ bottomOffset = 0, floating = false }: Props) {
             onPress={() => void dismissMiniPlayer()}
             hitSlop={8}
             style={styles.ctrlHit}
-            accessibilityLabel="Close mini player"
+            accessibilityLabel="Stop and close"
           >
             <Ionicons name="close" size={18} color={colors.textMuted} />
           </Pressable>
@@ -137,26 +173,30 @@ export function MiniPlayer({ bottomOffset = 0, floating = false }: Props) {
   }
 
   if (!current) return null;
+
+  if (isMiniPlayerMinimized) {
+    return renderMinimized(
+      current.title,
+      () => navigateTo('Player', { soundId: current.id }),
+      () => void togglePlay(),
+      isPlaying,
+    );
+  }
+
   const subtitle =
     queueLabel?.trim() ||
     (creatorName && current.creator_id ? creatorName : 'Now playing');
 
   return (
     <View style={wrapStyle} pointerEvents="box-none">
-      <View
-        style={[
-          styles.bar,
-          {
-            backgroundColor: colors.elevated,
-            borderColor: colors.border,
-          },
-        ]}
-      >
+      <View style={[styles.bar, { backgroundColor: colors.elevated, borderColor: colors.border }]}>
         <Pressable
           onPress={() => navigateTo('Player', { soundId: current.id })}
           style={styles.mainHit}
         >
-          <Ionicons name="chevron-up" size={18} color={colors.textMuted} />
+          <Pressable onPress={minimizeMiniPlayer} hitSlop={8} style={styles.ctrlHit}>
+            <Ionicons name="chevron-down" size={18} color={colors.textMuted} />
+          </Pressable>
           <CoverArt title={current.title} uri={current.cover_url} size={44} rounded={10} />
           <View style={styles.copy}>
             <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>
@@ -178,6 +218,7 @@ export function MiniPlayer({ bottomOffset = 0, floating = false }: Props) {
                 {subtitle}
               </Text>
             )}
+            <AudioOutputBadge route={audioRoute} colors={colors} compact />
           </View>
         </Pressable>
         <View style={styles.controls}>
@@ -221,7 +262,7 @@ export function MiniPlayer({ bottomOffset = 0, floating = false }: Props) {
             onPress={() => void dismissMiniPlayer()}
             hitSlop={8}
             style={styles.ctrlHit}
-            accessibilityLabel="Close mini player"
+            accessibilityLabel="Stop and close"
           >
             <Ionicons name="close" size={18} color={colors.textMuted} />
           </Pressable>
@@ -246,6 +287,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
+  miniChip: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 999,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-end',
+    maxWidth: '92%',
+  },
+  miniMain: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 },
+  miniCopy: { flex: 1, minWidth: 0, gap: 2 },
+  miniTitle: { fontFamily: 'DMSans_700Bold', fontSize: 13 },
+  miniPlay: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   mainHit: {
     flex: 1,
     minWidth: 0,
@@ -253,9 +315,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
   },
-  copy: { flex: 1, minWidth: 0 },
+  copy: { flex: 1, minWidth: 0, gap: 2 },
   title: { fontFamily: 'DMSans_700Bold', fontSize: 14 },
-  sub: { fontFamily: 'DMSans_400Regular', fontSize: 12, marginTop: 2 },
+  sub: { fontFamily: 'DMSans_400Regular', fontSize: 12 },
   controls: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   ctrlHit: {
     width: 32,

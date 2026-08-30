@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/auth-context';
+import { appAlert } from '@/components/AppDialog';
 
 type Row = {
   id: string;
@@ -40,7 +41,7 @@ export default function AdminVerificationsPage() {
       p_status: status,
       p_admin_note: status === 'approved' ? 'Earning approved' : 'Earning application rejected',
     });
-    if (error) alert(error.message);
+    if (error) appAlert(error.message);
     else void load();
   };
 

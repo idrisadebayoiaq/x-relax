@@ -9,6 +9,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { AppDialogHost } from '@/components/AppDialog';
 
 export type ThemePreference = 'system' | 'light' | 'dark';
 
@@ -63,7 +64,12 @@ export function AdminThemeProvider({ children }: { children: ReactNode }) {
     [preference, resolved, setPreference],
   );
 
-  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+  return (
+    <ThemeContext.Provider value={value}>
+      {children}
+      <AppDialogHost />
+    </ThemeContext.Provider>
+  );
 }
 
 export function useAdminTheme() {

@@ -2,6 +2,7 @@
 
 import { ActionButton } from '@/components/ActionButton';
 import { createClient } from '@/lib/supabase/client';
+import { appAlert } from '@/components/AppDialog';
 
 export function VerificationActions({ id }: { id: string }) {
   const review = async (status: 'approved' | 'rejected') => {
@@ -11,7 +12,7 @@ export function VerificationActions({ id }: { id: string }) {
       p_status: status,
       p_admin_note: status === 'approved' ? 'Verified' : 'Requirements not met',
     });
-    if (error) alert(error.message);
+    if (error) appAlert(error.message);
     else {
       await supabase.rpc('log_admin_action', {
         p_action: 'review_verification',

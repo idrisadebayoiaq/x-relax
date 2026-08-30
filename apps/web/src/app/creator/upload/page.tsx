@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/auth-context';
 import type { Category, Sound } from '@/types/database';
+import { appAlert } from '@/components/AppDialog';
 
 export default function CreatorUploadPage() {
   const router = useRouter();
@@ -29,7 +30,7 @@ export default function CreatorUploadPage() {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !audio || !title.trim()) return alert('Title and audio file required.');
+    if (!user || !audio || !title.trim()) return appAlert('Title and audio file required.');
     setBusy(true);
     const supabase = createClient();
     const soundId = crypto.randomUUID();
@@ -37,7 +38,7 @@ export default function CreatorUploadPage() {
     const { error: audioErr } = await supabase.storage.from('sounds').upload(audioPath, audio);
     if (audioErr) {
       setBusy(false);
-      return alert(audioErr.message);
+      return appAlert(audioErr.message);
     }
     let coverPath: string | null = null;
     if (cover) {
@@ -58,8 +59,8 @@ export default function CreatorUploadPage() {
       await supabase.from('sound_categories').insert({ sound_id: soundId, category_id: categoryId });
     }
     setBusy(false);
-    if (error) return alert(error.message);
-    alert('Published — your sound is live in the catalog.');
+    if (error) return appAlert(error.message);
+    appAlert('Published — your sound is live in the catalog.');
     router.push('/creator/sounds');
   };
 
