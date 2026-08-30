@@ -7,7 +7,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: 'X-Relax',
   slug: 'x-relax',
-  version: '1.0.14',
+  version: '1.0.15',
   orientation: 'portrait',
   icon: './assets/brand/app-icon.png',
   userInterfaceStyle: 'automatic',
@@ -54,7 +54,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       {
         backgroundColor: '#061428',
         image: './assets/brand/splash-icon.png',
-        imageWidth: 200,
+        imageWidth: 120,
       },
     ],
     'expo-font',

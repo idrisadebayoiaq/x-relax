@@ -193,6 +193,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let mounted = true;
 
+    const loadingTimeout = setTimeout(() => {
+      if (mounted) setLoading(false);
+    }, 6000);
+
     supabase.auth
       .getSession()
       .then(({ data }) => {
@@ -216,6 +220,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return () => {
       mounted = false;
+      clearTimeout(loadingTimeout);
       sub.subscription.unsubscribe();
     };
   }, [loadUserData]);

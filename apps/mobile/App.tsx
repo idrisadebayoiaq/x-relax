@@ -1,4 +1,4 @@
-import { Component, useEffect, type ErrorInfo, type ReactNode } from 'react';
+import { Component, useEffect, useState, type ErrorInfo, type ReactNode } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, Text, View, ActivityIndicator } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
@@ -30,6 +30,10 @@ import { AppDialogHost } from './src/ui/AppDialog';
 
 SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
+function hideSplash() {
+  SplashScreen.hideAsync().catch(() => undefined);
+}
+
 class ErrorBoundary extends Component<
   { children: ReactNode },
   { error: Error | null }
@@ -42,12 +46,13 @@ class ErrorBoundary extends Component<
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error('App crash', error, info.componentStack);
+    hideSplash();
   }
 
   render() {
     if (this.state.error) {
       return (
-        <View style={styles.crash}>
+        <View style={styles.center}>
           <Text style={styles.crashTitle}>Something went wrong</Text>
           <Text style={styles.crashBody}>{this.state.error.message}</Text>
         </View>
@@ -60,7 +65,7 @@ class ErrorBoundary extends Component<
 function ConfigGate({ children }: { children: ReactNode }) {
   if (!isSupabaseConfigured) {
     return (
-      <View style={styles.crash}>
+      <View style={styles.center}>
         <Text style={styles.crashTitle}>Missing configuration</Text>
         <Text style={styles.crashBody}>
           Supabase env vars were not included in this build. Rebuild with EAS preview env
@@ -77,7 +82,7 @@ function AppShell() {
   const { session } = useAuth();
 
   useEffect(() => {
-    SplashScreen.hideAsync().catch(() => undefined);
+    hideSplash();
   }, []);
 
   useEffect(() => {
@@ -104,17 +109,31 @@ export default function App() {
     DMSans_500Medium,
     DMSans_700Bold,
   });
+  const [bootReady, setBootReady] = useState(false);
+
+  useEffect(() => {
+    hideSplash();
+    const timer = setTimeout(hideSplash, 1500);
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     if (fontsLoaded) {
-      SplashScreen.hideAsync().catch(() => undefined);
+      setBootReady(true);
+      hideSplash();
+      return;
     }
+    const timer = setTimeout(() => {
+      setBootReady(true);
+      hideSplash();
+    }, 3500);
+    return () => clearTimeout(timer);
   }, [fontsLoaded]);
 
-  if (!fontsLoaded) {
+  if (!bootReady) {
     return (
-      <View style={styles.crash}>
-        <ActivityIndicator color="#fff" />
+      <View style={styles.center}>
+        <ActivityIndicator color="#F5C400" size="large" />
       </View>
     );
   }
@@ -143,9 +162,9 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  crash: {
+  center: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: '#061428',
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24,

@@ -5,32 +5,17 @@ import { UNKNOWN_AUDIO_ROUTE, isPrivateListening, shouldShowHeadsetTip } from '.
 
 export { isPrivateListening, shouldShowHeadsetTip };
 
+/**
+ * Audio output route detection — safe fallback until a stable native module ships.
+ * Avoids loading expo-audio-route at startup (was causing splash hangs on some builds).
+ */
 export function useAudioOutputRoute(): AudioOutputRoute {
   const [route, setRoute] = useState<AudioOutputRoute>(UNKNOWN_AUDIO_ROUTE);
 
   useEffect(() => {
     if (Platform.OS === 'web') return;
-
-    let active = true;
-    let sub: { remove: () => void } | null = null;
-
-    (async () => {
-      try {
-        const mod = await import('expo-audio-route');
-        const next = await mod.getCurrentAudioRoute();
-        if (active) setRoute(next);
-        sub = mod.addAudioRouteListener((updated) => {
-          if (active) setRoute(updated);
-        });
-      } catch {
-        if (active) setRoute(UNKNOWN_AUDIO_ROUTE);
-      }
-    })();
-
-    return () => {
-      active = false;
-      sub?.remove();
-    };
+    // Future: plug in native headset detection here without blocking app boot.
+    setRoute(UNKNOWN_AUDIO_ROUTE);
   }, []);
 
   return route;

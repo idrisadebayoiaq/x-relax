@@ -1,6 +1,6 @@
 {
   "name": "x-relax",
-  "version": "1.0.14",
+  "version": "1.0.15",
   "main": "index.ts",
   "dependencies": {
     "@expo-google-fonts/dm-sans": "^0.4.2",
@@ -15,7 +15,6 @@
     "@supabase/supabase-js": "^2.111.0",
     "expo": "~57.0.9",
     "expo-audio": "~57.0.3",
-    "expo-audio-route": "file:./modules/expo-audio-route",
     "expo-clipboard": "~57.0.1",
     "expo-constants": "~57.0.10",
     "expo-device": "~57.0.1",
