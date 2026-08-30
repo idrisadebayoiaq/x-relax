@@ -26,8 +26,6 @@ import { ScreenScaffold } from '../../ui/Screen';
 import { VerifiedBadge } from '../../ui/VerifiedBadge';
 import { ShareAppSheet } from '../../navigation/ShareAppSheet';
 
-const GOLD = '#C9A227';
-const GOLD_SOFT = 'rgba(201, 162, 39, 0.18)';
 
 type ProfileStats = {
   soundsSaved: number;
@@ -220,7 +218,7 @@ export function ProfileScreen() {
   const initial = (profile?.display_name?.trim()?.[0] ?? user?.email?.[0] ?? 'X').toUpperCase();
   const avatarSource = avatarUri ?? profile?.avatar_url ?? null;
   const showRemoteAvatar = !!avatarSource && !avatarFailed;
-  const cardBg = isDark ? '#141414' : colors.surface;
+  const cardBg = colors.elevated;
   const roleLabel =
     profile?.role === 'admin'
       ? 'Admin'
@@ -252,8 +250,8 @@ export function ProfileScreen() {
             <LinearGradient
               colors={
                 isDark
-                  ? ['#1A1A1A', 'rgba(201,162,39,0.2)', '#121212']
-                  : ['#EDEAE4', 'rgba(201,162,39,0.25)', '#F7F4EE']
+                  ? [colors.background, colors.accentSoft, colors.surface]
+                  : [colors.gradientTop, colors.accentSoft, colors.surface]
               }
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
@@ -268,7 +266,7 @@ export function ProfileScreen() {
 
         <Pressable onPress={pickAvatar} style={styles.avatarPress}>
           <LinearGradient
-            colors={[GOLD, '#8B6914', GOLD]}
+            colors={[colors.accent, '#1D4ED8', colors.accent]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.avatarRing}
@@ -317,21 +315,21 @@ export function ProfileScreen() {
         ) : null}
 
         <View style={styles.badgeRow}>
-          <View style={[styles.rolePill, { backgroundColor: isDark ? '#1C1C1C' : '#EDEAE4' }]}>
+          <View style={[styles.rolePill, { backgroundColor: colors.surface }]}>
             <Text style={[styles.rolePillText, { color: colors.text }]}>{roleLabel}</Text>
           </View>
           {premiumActive ? (
-            <View style={[styles.premiumPill, { borderColor: GOLD, backgroundColor: GOLD_SOFT }]}>
-              <Ionicons name="diamond" size={12} color={GOLD} />
-              <Text style={[styles.premiumPillText, { color: GOLD }]}>Premium</Text>
+            <View style={[styles.premiumPill, { borderColor: colors.accent, backgroundColor: colors.accentSoft }]}>
+              <Ionicons name="diamond" size={12} color={colors.accent} />
+              <Text style={[styles.premiumPillText, { color: colors.accent }]}>Premium</Text>
             </View>
           ) : (
-            <View style={[styles.rolePill, { backgroundColor: isDark ? '#1C1C1C' : '#EDEAE4' }]}>
+            <View style={[styles.rolePill, { backgroundColor: colors.surface }]}>
               <Text style={[styles.rolePillText, { color: colors.textMuted }]}>Free</Text>
             </View>
           )}
           {isVerifiedCreator ? (
-            <View style={[styles.rolePill, { backgroundColor: isDark ? '#1C1C1C' : '#EDEAE4' }]}>
+            <View style={[styles.rolePill, { backgroundColor: colors.surface }]}>
               <Text style={[styles.rolePillText, { color: colors.text }]}>Verified creator</Text>
             </View>
           ) : null}
@@ -342,7 +340,7 @@ export function ProfileScreen() {
       <View style={[styles.statsCard, { backgroundColor: cardBg, borderColor: colors.border }]}>
         <StatCell
           icon="musical-notes"
-          iconColor={GOLD}
+          iconColor={colors.accent}
           value={String(stats.soundsSaved)}
           label="Sounds Saved"
           colors={colors}
@@ -378,8 +376,8 @@ export function ProfileScreen() {
       <View style={[styles.groupCard, { backgroundColor: cardBg, borderColor: colors.border }]}>
         <MenuRow
           icon="create"
-          iconBg={GOLD_SOFT}
-          iconColor={GOLD}
+          iconBg={colors.accentSoft}
+          iconColor={colors.accent}
           label="Edit profile"
           hint="Banner, photo, bio, city, and country."
           onPress={() => setEditOpen(true)}
@@ -399,8 +397,8 @@ export function ProfileScreen() {
         {!isCreator ? (
           <MenuRow
             icon="mic"
-            iconBg={GOLD_SOFT}
-            iconColor={GOLD}
+            iconBg={colors.accentSoft}
+            iconColor={colors.accent}
             label="Become a Creator"
             hint="Upload sounds and earn from Premium."
             onPress={() => navigation.navigate('BecomeCreator')}
@@ -410,8 +408,8 @@ export function ProfileScreen() {
         ) : (
           <MenuRow
             icon="mic"
-            iconBg={GOLD_SOFT}
-            iconColor={GOLD}
+            iconBg={colors.accentSoft}
+            iconColor={colors.accent}
             label="Creator dashboard"
             hint="Uploads, earnings, and verification."
             onPress={() => navigation.navigate('Creator')}
@@ -439,8 +437,8 @@ export function ProfileScreen() {
           colors={colors}
           trailing={
             premiumActive ? (
-              <View style={[styles.activeBadge, { backgroundColor: GOLD_SOFT, borderColor: GOLD }]}>
-                <Text style={[styles.activeBadgeText, { color: GOLD }]}>Active</Text>
+              <View style={[styles.activeBadge, { backgroundColor: colors.accentSoft, borderColor: colors.accent }]}>
+                <Text style={[styles.activeBadgeText, { color: colors.accent }]}>Active</Text>
               </View>
             ) : null
           }
@@ -516,7 +514,7 @@ export function ProfileScreen() {
             style={[
               styles.editSheet,
               {
-                backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF',
+                backgroundColor: colors.elevated,
                 paddingBottom: insets.bottom + 20,
               },
             ]}
@@ -537,8 +535,8 @@ export function ProfileScreen() {
                     contentFit="cover"
                   />
                 ) : (
-                  <View style={[styles.editBanner, { backgroundColor: isDark ? '#2C2C2E' : '#EDEAE4', alignItems: 'center', justifyContent: 'center' }]}>
-                    <Text style={{ color: GOLD, fontFamily: 'DMSans_500Medium' }}>Add banner</Text>
+                  <View style={[styles.editBanner, { backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' }]}>
+                    <Text style={{ color: colors.accent, fontFamily: 'DMSans_500Medium' }}>Add banner</Text>
                   </View>
                 )}
               </Pressable>
@@ -552,7 +550,7 @@ export function ProfileScreen() {
                     </Text>
                   </View>
                 )}
-                <Text style={{ color: GOLD, fontFamily: 'DMSans_500Medium' }}>Change photo</Text>
+                <Text style={{ color: colors.accent, fontFamily: 'DMSans_500Medium' }}>Change photo</Text>
               </Pressable>
               <TextInput
                 value={name}
@@ -564,7 +562,7 @@ export function ProfileScreen() {
                   {
                     color: colors.text,
                     borderColor: colors.border,
-                    backgroundColor: isDark ? '#2C2C2E' : '#F3F0EA',
+                    backgroundColor: colors.surface,
                   },
                 ]}
               />
@@ -580,7 +578,7 @@ export function ProfileScreen() {
                   {
                     color: colors.text,
                     borderColor: colors.border,
-                    backgroundColor: isDark ? '#2C2C2E' : '#F3F0EA',
+                    backgroundColor: colors.surface,
                   },
                 ]}
               />
@@ -594,7 +592,7 @@ export function ProfileScreen() {
                   {
                     color: colors.text,
                     borderColor: colors.border,
-                    backgroundColor: isDark ? '#2C2C2E' : '#F3F0EA',
+                    backgroundColor: colors.surface,
                   },
                 ]}
               />
@@ -611,7 +609,7 @@ export function ProfileScreen() {
                   >
                     <Text
                       style={{
-                        color: selected ? GOLD : colors.text,
+                        color: selected ? colors.accent : colors.text,
                         fontFamily: selected ? 'DMSans_700Bold' : 'DMSans_400Regular',
                       }}
                     >

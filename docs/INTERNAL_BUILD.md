@@ -23,7 +23,6 @@ npm run build:apk
 Preview environment variables on EAS (from `.env.example`):
 - `EXPO_PUBLIC_SUPABASE_URL`
 - `EXPO_PUBLIC_SUPABASE_ANON_KEY`
-- `EXPO_PUBLIC_ADMOB_USE_TEST_ADS=true` (test ads on sideload builds)
 - `GOOGLE_SERVICES_JSON` (file — `google-services.json`, not in git)
 
 Download the APK from the Expo dashboard when the build completes.
@@ -42,6 +41,5 @@ eas build -p android --profile development
 
 ## Notes
 
-- Production AdMob IDs stay deferred — keep test units
 - Privacy Policy / Terms drafts: [LEGAL.md](./LEGAL.md)
 - Sound prep: [CONTENT_LIBRARY.md](./CONTENT_LIBRARY.md)

@@ -16,7 +16,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   splash: {
     image: './assets/brand/splash-icon.png',
     resizeMode: 'contain',
-    backgroundColor: '#000000',
+    backgroundColor: '#061428',
   },
   ios: {
     supportsTablet: true,
@@ -31,7 +31,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       process.env.GOOGLE_SERVICES_JSON ?? './google-services.json',
     adaptiveIcon: {
       foregroundImage: './assets/brand/app-icon.png',
-      backgroundColor: '#000000',
+      backgroundColor: '#061428',
     },
     predictiveBackGestureEnabled: false,
     permissions: [
@@ -52,7 +52,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     [
       'expo-splash-screen',
       {
-        backgroundColor: '#000000',
+        backgroundColor: '#061428',
         image: './assets/brand/splash-icon.png',
         imageWidth: 200,
       },

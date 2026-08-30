@@ -14,7 +14,7 @@ Follow this document in order. Tick matching items in [CHECKLIST.md](./CHECKLIST
 | Content | Full sound library seeded **after** app features work |
 | Backend | Supabase MCP project `bfilhkxyjiofkfqwqyep` |
 | Payments | Manual — see [PAYMENT_DETAILS.md](./PAYMENT_DETAILS.md) |
-| Ads | AdMob test IDs until store-ready |
+| Ads | None — no AdMob or Premium Pass |
 | Icon | Official mark in `assets/brand/` — app, splash, push, in-app |
 | Theme | Black & white only — light + dark modes — see [BRANDING.md](./BRANDING.md) |
 
@@ -35,7 +35,6 @@ Suggested mobile libraries:
 - `expo-file-system` + secure storage — downloads
 - `@react-native-async-storage/async-storage` — session cache
 - `react-native-track-player` (if needed) — background / lock screen
-- `react-native-google-mobile-ads` — AdMob (Phase 3, test IDs)
 
 ---
 
@@ -139,7 +138,7 @@ Create: `avatars`, `covers`, `sounds`, `payment-proofs`, `artist-documents`, `re
 
 ## Phase 3 — Premium features
 
-**Goal:** Manual Premium, Premium Pass, downloads, mixing, test ads.
+**Goal:** Manual Premium, downloads, mixing.
 
 ### 3.1 Plans
 
@@ -164,43 +163,30 @@ Store payment method JSON from [PAYMENT_DETAILS.md](./PAYMENT_DETAILS.md) in `ap
 
 Implement approve logic in Edge Function `approve-payment` (service role) so clients cannot self-approve.
 
-### 3.3 Premium Pass
-
-- Track rewarded ad completions in `ad_reward_events`
-- After 5 valid rewards in a rolling window → insert `premium_passes` (24h)
-- Enforce **max one pass per calendar day** per user
-- Use AdMob **test** rewarded unit IDs
-
-### 3.4 Downloads
+### 3.3 Downloads
 
 - Premium-only
 - Signed URL fetch → local file
 - Offline playback list in Library
 - Respect sound unpublish (hide or block offline item)
 
-### 3.5 Sound mixing
+### 3.4 Sound mixing
 
 - Select multiple published ambient tracks
 - Per-track volume
 - Free: limited tracks (decide in REQUIREMENTS — suggest 2)
 - Premium: unlimited + save `mixes` / `mix_tracks`
 
-### 3.6 AdMob rules
+### 3.5 Subscription expiry
 
-Show ads only if user is Free Listener (not Guest preview-only, not Premium, not Creator, not Admin).  
-Until store release: test ads only.
-
-### 3.7 Subscription expiry
-
-Cron Edge Function `expire-subscriptions` daily: downgrade expired non-lifetime subs; end expired passes.
+Cron Edge Function `expire-subscriptions` daily: downgrade expired non-lifetime subs.
 
 ### Exit
 
 - You can pay yourself (test), upload proof, approve as admin, and see Premium unlocks.
-- Pass grants 24h Premium once per day.
 - Mix + download gated correctly.
 
-**Phase 3 status (2026-07-30):** Plans + payment methods seeded. Manual payment + proof upload. Admin review RPC + Edge Functions (`approve-payment`, `expire-subscriptions`). Premium Pass via 5 test ads. Downloads, mix studio, Free-only test ad banner. Premium tab in app.
+**Phase 3 status (2026-08-30):** Plans + payment methods seeded. Manual payment + proof upload. Admin review RPC + Edge Functions (`approve-payment`, `expire-subscriptions`). Downloads and mix studio. No ads or Premium Pass. Premium tab in app.
 
 ---
 
@@ -315,7 +301,6 @@ Follow [QA.md](./QA.md):
 - Downloads offline
 - Mix save/load
 - Creator upload + reject/publish
-- Ads test units on Free account only
 - RLS: user A cannot read user B payment proofs
 - Admin web queues
 
@@ -330,7 +315,6 @@ Follow [QA.md](./QA.md):
 - Play Store listing
 - App Store / Apple Sign-In
 - Google Sign-In
-- Production AdMob
 - Payment automation
 
 ---
@@ -343,7 +327,7 @@ Follow [QA.md](./QA.md):
 | 2 | Phase 2: catalog, player, home, history |
 | 3 | Phase 2: search, playlists, favourites, ratings |
 | 4 | Phase 3: plans, payment proof flow, admin approve |
-| 5 | Phase 3: downloads, mixing, Premium Pass, test ads |
+| 5 | Phase 3: downloads, mixing |
 | 6 | Phase 4: creator upload + moderation |
 | 7 | Phase 4: analytics, earnings, withdrawals |
 | 8 | Phase 5: admin web + notifications |

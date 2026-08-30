@@ -45,7 +45,7 @@ export function SignInScreen({ navigation }: Props) {
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       <LinearGradient
-        colors={isDark ? ['#1A1410', '#000', '#000'] : ['#EDE6DC', '#FFF', '#FFF']}
+        colors={[colors.gradientTop, colors.background, colors.background]}
         locations={[0, 0.4, 1]}
         style={StyleSheet.absoluteFill}
       />

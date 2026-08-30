@@ -1,6 +1,6 @@
 export type UserRole = 'guest' | 'listener' | 'creator' | 'admin';
 export type SignupRole = 'listener' | 'creator';
-export type PremiumStatus = 'none' | 'pass' | 'subscribed';
+export type PremiumStatus = 'none' | 'subscribed';
 export type ThemePreference = 'system' | 'light' | 'dark';
 export type AdminRole = 'super' | 'finance' | 'content' | 'support';
 export type CreatorLevel = 'new' | 'rising' | 'verified' | 'elite';

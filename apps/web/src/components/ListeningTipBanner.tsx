@@ -42,7 +42,7 @@ export function ListeningTipBanner() {
             <li>Unlimited listening every day</li>
             <li>Loop sounds and Sleep Time schedules</li>
             <li>Offline downloads and Mix Studio</li>
-            <li>Ad-free calm, sleep timer, and more</li>
+            <li>Sleep timer, Mix Studio, and more</li>
           </ul>
         </div>
         <div className="flex flex-col gap-2">

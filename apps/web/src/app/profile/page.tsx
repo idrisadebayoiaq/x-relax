@@ -25,7 +25,8 @@ import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/auth-context';
 import { COUNTRIES } from '@/lib/countries';
 
-const GOLD = '#C9A227';
+const ACCENT = 'var(--accent)';
+const ACCENT_SOFT = 'var(--accent-soft)';
 
 type ProfileStats = {
   soundsSaved: number;
@@ -217,7 +218,7 @@ export default function ProfilePage() {
           <div
             className="rounded-full p-[3px]"
             style={{
-              background: `linear-gradient(135deg, ${GOLD}, #8B6914, ${GOLD})`,
+              background: `linear-gradient(135deg, ${ACCENT}, var(--brand), ${ACCENT})`,
             }}
           >
             <div className="rounded-full bg-background p-0.5">
@@ -268,7 +269,7 @@ export default function ProfilePage() {
           {premiumActive ? (
             <span
               className="chip inline-flex items-center gap-1.5"
-              style={{ borderColor: GOLD, color: GOLD, background: 'rgba(201,162,39,0.12)' }}
+              style={{ borderColor: ACCENT, color: ACCENT, background: ACCENT_SOFT }}
             >
               <Gem size={12} />
               Premium
@@ -280,7 +281,7 @@ export default function ProfilePage() {
       </div>
 
       <div className="card grid grid-cols-4 divide-x divide-border py-4">
-        <Stat icon={<Music2 size={16} color={GOLD} />} value={String(stats.soundsSaved)} label="Sounds Saved" />
+        <Stat icon={<Music2 size={16} color={ACCENT} />} value={String(stats.soundsSaved)} label="Sounds Saved" />
         <Stat icon={<Heart size={16} className="text-red-500" />} value={String(stats.favourites)} label="Favorites" />
         <Stat
           icon={<ArrowDownCircle size={16} className="text-green-500" />}
@@ -300,8 +301,8 @@ export default function ProfilePage() {
           className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-background/60"
           onClick={() => setEditOpen(true)}
         >
-          <span className="h-9 w-9 rounded-xl flex items-center justify-center" style={{ background: 'rgba(201,162,39,0.16)' }}>
-            <Settings2 size={18} color={GOLD} />
+          <span className="h-9 w-9 rounded-xl flex items-center justify-center" style={{ background: ACCENT_SOFT }}>
+            <Settings2 size={18} color={ACCENT} />
           </span>
           <span className="flex-1 min-w-0">
             <span className="block font-semibold text-sm">Edit profile</span>
@@ -326,16 +327,16 @@ export default function ProfilePage() {
         {!isCreator ? (
           <Row
             href="/creator/become"
-            icon={<Mic size={18} color={GOLD} />}
-            iconBg="rgba(201,162,39,0.16)"
+            icon={<Mic size={18} color={ACCENT} />}
+            iconBg={ACCENT_SOFT}
             label="Become a Creator"
             hint="Upload sounds and earn from Premium."
           />
         ) : (
           <Row
             href="/creator"
-            icon={<Mic size={18} color={GOLD} />}
-            iconBg="rgba(201,162,39,0.16)"
+            icon={<Mic size={18} color={ACCENT} />}
+            iconBg={ACCENT_SOFT}
             label="Creator dashboard"
             hint="Uploads, earnings, and verification."
           />
@@ -357,7 +358,7 @@ export default function ProfilePage() {
             premiumActive ? (
               <span
                 className="text-[11px] font-bold px-2.5 py-1 rounded-full border mr-1"
-                style={{ borderColor: GOLD, color: GOLD, background: 'rgba(201,162,39,0.12)' }}
+                style={{ borderColor: ACCENT, color: ACCENT, background: ACCENT_SOFT }}
               >
                 Active
               </span>
@@ -428,7 +429,7 @@ export default function ProfilePage() {
                   className="h-24 w-full object-cover"
                 />
               ) : (
-                <div className="h-24 w-full bg-background flex items-center justify-center text-sm" style={{ color: GOLD }}>
+                <div className="h-24 w-full bg-background flex items-center justify-center text-sm" style={{ color: ACCENT }}>
                   Add banner
                 </div>
               )}
@@ -448,7 +449,7 @@ export default function ProfilePage() {
             <button
               type="button"
               className="flex items-center gap-3 text-sm"
-              style={{ color: GOLD }}
+              style={{ color: ACCENT }}
               onClick={() => fileRef.current?.click()}
             >
               {avatarUri ? (

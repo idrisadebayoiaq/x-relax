@@ -64,7 +64,7 @@ export function SignUpScreen({ navigation }: Props) {
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       <LinearGradient
-        colors={isDark ? ['#1A1410', '#000', '#000'] : ['#EDE6DC', '#FFF', '#FFF']}
+        colors={[colors.gradientTop, colors.background, colors.background]}
         locations={[0, 0.35, 1]}
         style={StyleSheet.absoluteFill}
       />
@@ -188,7 +188,7 @@ export function SignUpScreen({ navigation }: Props) {
                 styles.countryList,
                 {
                   borderColor: colors.border,
-                  backgroundColor: isDark ? '#1A1410' : colors.surface,
+                  backgroundColor: colors.elevated,
                 },
               ]}
             >

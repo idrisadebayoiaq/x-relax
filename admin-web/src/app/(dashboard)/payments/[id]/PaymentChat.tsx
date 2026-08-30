@@ -66,7 +66,7 @@ export function PaymentChat({ paymentId }: { paymentId: string }) {
         />
         <button
           disabled={busy}
-          className="rounded-lg bg-foreground text-background px-4 py-2 font-semibold disabled:opacity-50"
+          className="rounded-lg bg-accent text-on-accent px-4 py-2 font-semibold disabled:opacity-50"
         >
           Send
         </button>

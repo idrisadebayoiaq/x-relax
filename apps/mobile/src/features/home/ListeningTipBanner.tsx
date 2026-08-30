@@ -63,7 +63,7 @@ export function ListeningTipBanner() {
                 'Unlimited listening every day',
                 'Loop sounds and Sleep Time schedules',
                 'Offline downloads and Mix Studio',
-                'Ad-free calm, sleep timer, and more',
+                'Sleep timer, Mix Studio, and more',
               ] as const
             ).map((line) => (
               <Text key={line} style={[styles.premiumLine, { color: colors.textMuted }]}>

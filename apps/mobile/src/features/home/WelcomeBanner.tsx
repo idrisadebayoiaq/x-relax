@@ -53,7 +53,7 @@ export function WelcomeBanner() {
     <Modal transparent animationType="fade" visible onRequestClose={dismiss}>
       <View style={styles.backdrop}>
         <View style={[styles.card, { backgroundColor: colors.background, borderColor: colors.border }]}>
-          <LinearGradient colors={['#1A1410', '#6B5344']} style={styles.orb} />
+          <LinearGradient colors={['#0B3D91', '#F5C400']} style={styles.orb} />
           <Text style={[styles.brand, { color: colors.textMuted }]}>X-Relax</Text>
           <Text style={[styles.title, { color: colors.text }]}>{welcome.title}</Text>
           {welcome.body ? (
@@ -66,7 +66,7 @@ export function WelcomeBanner() {
                 'Unlimited listening every day',
                 'Loop, Sleep Time, and sleep timer',
                 'Offline downloads and Mix Studio',
-                'Ad-free calm experience',
+                'Premium subscription extras',
               ] as const
             ).map((line) => (
               <Text key={line} style={[styles.premiumLine, { color: colors.textMuted }]}>

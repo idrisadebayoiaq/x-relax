@@ -314,7 +314,7 @@ export function LibraryScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       <LinearGradient
-        colors={isDark ? ['#101010', '#000000', '#000000'] : ['#F3F0EA', '#FFFFFF', '#FFFFFF']}
+        colors={[colors.gradientTop, colors.background, colors.background]}
         locations={[0, 0.28, 1]}
         style={StyleSheet.absoluteFill}
       />

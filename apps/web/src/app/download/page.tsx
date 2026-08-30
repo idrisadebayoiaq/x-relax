@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { formatBytes } from '@/lib/format';
+import { recordAnalyticsEvent } from '@/lib/analytics';
 import { createClient } from '@/lib/supabase/client';
 import type { AppRelease } from '@/types/database';
 
@@ -75,7 +76,19 @@ export default function DownloadPage() {
               ) : null}
               {isAvailable ? (
                 <div className="flex flex-wrap items-center gap-3">
-                  <a href={url!} download className="btn btn-primary">
+                  <a
+                    href={url!}
+                    download
+                    className="btn btn-primary"
+                    onClick={() => {
+                      void recordAnalyticsEvent({
+                        eventType: 'app_download',
+                        path: '/download',
+                        source: 'download_page',
+                        platform: 'web',
+                      });
+                    }}
+                  >
                     Download APK
                   </a>
                   <span className="text-sm text-muted">{formatBytes(release.file_size_bytes)}</span>

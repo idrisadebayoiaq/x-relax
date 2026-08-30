@@ -47,7 +47,6 @@ import type { Playlist, Sound } from '../../types/database';
 import type { MainTabParamList, RootStackParamList } from '../../navigation/types';
 import { Image } from 'expo-image';
 
-const GOLD = '#C9A227';
 
 type Section = {
   key: string;
@@ -455,7 +454,7 @@ export function HomeScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       <LinearGradient
-        colors={isDark ? ['#0A1214', '#000000', '#000000'] : ['#F3F0EA', '#FFFFFF', '#FFFFFF']}
+        colors={[colors.gradientTop, colors.background, colors.background]}
         locations={[0, 0.35, 1]}
         style={StyleSheet.absoluteFill}
       />
@@ -501,10 +500,10 @@ export function HomeScreen() {
           <View
             style={[
               styles.offlineBanner,
-              { backgroundColor: isDark ? '#1C1C1C' : '#EDEAE4', borderColor: colors.border },
+              { backgroundColor: colors.elevated, borderColor: colors.border },
             ]}
           >
-            <Ionicons name="cloud-offline-outline" size={16} color={GOLD} />
+            <Ionicons name="cloud-offline-outline" size={16} color={colors.accent} />
             <Text style={{ color: colors.text, fontFamily: 'DMSans_500Medium', fontSize: 12, flex: 1 }}>
               Offline · only downloaded sounds play
             </Text>
@@ -542,7 +541,7 @@ export function HomeScreen() {
           {/* Search */}
           <Pressable
             onPress={() => openSearch()}
-            style={[styles.searchBar, { backgroundColor: isDark ? '#1A1A1A' : colors.surface, borderColor: colors.border }]}
+            style={[styles.searchBar, { backgroundColor: colors.elevated, borderColor: colors.border }]}
           >
             <Ionicons name="search" size={18} color={colors.textMuted} />
             <Text style={[styles.searchPlaceholder, { color: colors.textMuted }]} numberOfLines={1}>
@@ -601,7 +600,7 @@ export function HomeScreen() {
                     }
                     style={[
                       styles.continueCard,
-                      { backgroundColor: isDark ? '#141414' : colors.surface, borderColor: colors.border },
+                      { backgroundColor: colors.elevated, borderColor: colors.border },
                     ]}
                   >
                     <View style={styles.continueArt}>
@@ -622,7 +621,7 @@ export function HomeScreen() {
                       <Text style={[styles.continueMeta, { color: colors.textMuted }]} numberOfLines={1}>
                         {formatDuration(item.sound.duration_seconds) || 'Sound'}
                       </Text>
-                      <View style={[styles.progressTrack, { backgroundColor: isDark ? '#2A2A2A' : '#E5E5E5' }]}>
+                      <View style={[styles.progressTrack, { backgroundColor: colors.border }]}>
                         <View
                           style={[
                             styles.progressFill,
@@ -764,7 +763,7 @@ export function HomeScreen() {
                     style={[
                       styles.moodDisc,
                       {
-                        backgroundColor: isDark ? '#1A1A1A' : colors.surface,
+                        backgroundColor: colors.elevated,
                         borderColor: colors.border,
                       },
                     ]}

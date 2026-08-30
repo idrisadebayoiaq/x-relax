@@ -74,7 +74,7 @@ export function PlayerBar() {
           <button
             type="button"
             className={`btn btn-outline px-3 py-2 hidden sm:inline-flex items-center justify-center ${
-              isLooping ? 'bg-foreground text-background border-foreground' : ''
+              isLooping ? 'bg-accent text-on-accent border-accent' : ''
             }`}
             onClick={() => {
               if (!isPremium) {
@@ -97,11 +97,11 @@ export function PlayerBar() {
           </button>
         </div>
         <div className="hidden md:block w-40 h-1 rounded bg-border overflow-hidden">
-          <div className="h-full bg-foreground" style={{ width: `${progress}%` }} />
+          <div className="h-full bg-accent" style={{ width: `${progress}%` }} />
         </div>
       </div>
       <div className="md:hidden mt-2 h-1 rounded bg-border overflow-hidden">
-        <div className="h-full bg-foreground" style={{ width: `${progress}%` }} />
+        <div className="h-full bg-accent" style={{ width: `${progress}%` }} />
       </div>
     </div>
   );

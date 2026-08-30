@@ -157,7 +157,7 @@ export default function CreatorPage() {
                     </div>
                     <div className="h-2 rounded-full bg-border overflow-hidden">
                       <div
-                        className={`h-full rounded-full ${req.met ? 'bg-emerald-500' : 'bg-[#C9A227]'}`}
+                        className={`h-full rounded-full ${req.met ? 'bg-emerald-500' : 'bg-accent'}`}
                         style={{ width: `${pct}%` }}
                       />
                     </div>

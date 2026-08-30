@@ -64,7 +64,7 @@ export function PremiumScreen() {
       }
     >
       <View style={styles.heroWrap}>
-        <LinearGradient colors={['#1A1410', '#8A6A45']} style={styles.hero}>
+        <LinearGradient colors={['#061428', '#0B3D91', '#F5C400']} style={styles.hero}>
           <Text style={styles.heroEyebrow}>{isPremium ? 'Active' : 'Upgrade'}</Text>
           <Text style={styles.heroTitle}>
             {isPremium ? 'Premium calm' : 'Go deeper'}

@@ -31,8 +31,6 @@ Use Supabase Auth (`auth.users`). App profiles hang off `auth.users.id`.
 | `play_events` | Append-only play segments for earnings (recommended) |
 | `subscriptions` | Active Premium period |
 | `subscription_plans` | Monthly / Quarterly / Yearly / Lifetime prices |
-| `premium_passes` | 24h passes from rewarded ads |
-| `ad_reward_events` | Anti-abuse log for Premium Pass |
 | `payment_requests` | Manual payment submissions |
 | `payment_messages` | Payment chat thread |
 | `creator_verifications` | Verification applications |
@@ -48,7 +46,7 @@ Use Supabase Auth (`auth.users`). App profiles hang off `auth.users.id`.
 
 ```text
 user_role: guest | listener | creator | admin
-premium_status: none | pass | subscribed
+premium_status: none | subscribed
 sound_status: draft | pending | published | rejected | archived
 payment_status: pending | approved | rejected | need_more_info | refunded
 withdrawal_status: pending | approved | rejected | paid
@@ -79,7 +77,7 @@ published → archived
 
 1. Guests (anon): read **published** catalog metadata only; stream **preview** URLs only.
 2. Authenticated listeners: favourites, playlists, ratings, own history.
-3. Premium check: downloads + full mix save + no-ads flag via `subscriptions` / `premium_passes`.
+3. Premium check: downloads + full mix save via `subscriptions` only.
 4. Creators: CRUD own drafts; read own analytics.
 5. Admins: scoped by `admin_profiles.role`.
 6. Never expose `service_role` key in the mobile app.
@@ -90,7 +88,6 @@ published → archived
 |----------|-------|-----|
 | `approve-payment` | 3 | Approve payment + activate Premium |
 | `expire-subscriptions` | 3 | Cron: end expired Premium |
-| `grant-premium-pass` | 3 | Validate 5 rewards → 24h pass |
 | `calculate-earnings` | 4 | Monthly creator pool split |
 | `send-push` | 5 | FCM wrapper |
 | `moderate-sound` | 4 | Publish / reject helpers |

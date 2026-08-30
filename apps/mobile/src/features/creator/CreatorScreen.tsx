@@ -148,7 +148,7 @@ export function CreatorScreen() {
       }
     >
       <View style={styles.heroWrap}>
-        <LinearGradient colors={['#1A1410', '#6B5344']} style={styles.hero}>
+        <LinearGradient colors={['#061428', '#0B3D91', '#F5C400']} style={styles.hero}>
           <Text style={styles.heroEyebrow}>Earnings</Text>
           <Text style={styles.heroAmount}>
             ${Number(stats?.earnings_usd ?? 0).toFixed(2)}
@@ -238,7 +238,7 @@ export function CreatorScreen() {
                         styles.progressFill,
                         {
                           width: `${pct}%`,
-                          backgroundColor: req.met ? '#22C55E' : '#C9A227',
+                          backgroundColor: req.met ? '#22C55E' : colors.accent,
                         },
                       ]}
                     />

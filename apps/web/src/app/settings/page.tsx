@@ -58,7 +58,7 @@ export default function SettingsPage() {
             key={key}
             type="button"
             className={`w-full text-left px-4 py-3 border-b border-border last:border-0 hover:bg-background/60 ${
-              preference === key ? 'font-semibold' : ''
+              preference === key ? 'font-semibold bg-accent-soft text-accent' : 'text-foreground'
             }`}
             onClick={() => void setPreference(key)}
           >

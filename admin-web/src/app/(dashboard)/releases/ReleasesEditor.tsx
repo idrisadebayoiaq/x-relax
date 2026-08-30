@@ -194,7 +194,7 @@ export function ReleasesEditor() {
           <button
             type="button"
             disabled={busy}
-            className="rounded-lg bg-foreground text-background px-4 py-2 text-sm font-semibold disabled:opacity-50"
+            className="rounded-lg bg-accent text-on-accent px-4 py-2 text-sm font-semibold disabled:opacity-50"
             onClick={() => void saveRelease()}
           >
             {busy ? 'Saving…' : editingId ? 'Update release' : 'Create release'}

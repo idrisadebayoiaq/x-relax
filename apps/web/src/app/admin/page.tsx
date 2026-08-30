@@ -1,9 +1,10 @@
 'use client';
 
-import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/auth-context';
+import { AnalyticsDashboard, type QueueCard } from '@/components/admin/AnalyticsDashboard';
+import { emptyAnalyticsSummary, fetchAdminAnalytics, type AnalyticsSummary } from '@/lib/analytics';
 
 async function count(table: string, filter?: { column: string; value: string }) {
   const supabase = createClient();
@@ -15,13 +16,15 @@ async function count(table: string, filter?: { column: string; value: string }) 
 
 export default function AdminOverviewPage() {
   const { isAdmin } = useAuth();
-  const [cards, setCards] = useState<{ href: string; label: string; value: number }[]>([]);
+  const [summary, setSummary] = useState<AnalyticsSummary>(emptyAnalyticsSummary());
+  const [queues, setQueues] = useState<QueueCard[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!isAdmin) return;
     void (async () => {
       const [
+        analytics,
         pendingPayments,
         pendingSounds,
         pendingVerifications,
@@ -30,6 +33,7 @@ export default function AdminOverviewPage() {
         openSupport,
         appReleases,
       ] = await Promise.all([
+        fetchAdminAnalytics(30),
         count('payment_requests', { column: 'status', value: 'pending' }),
         count('sounds', { column: 'status', value: 'pending' }),
         count('creator_verifications', { column: 'status', value: 'pending' }),
@@ -38,14 +42,15 @@ export default function AdminOverviewPage() {
         count('support_threads', { column: 'status', value: 'open' }),
         count('app_releases'),
       ]);
-      setCards([
-        { href: '/admin/payments', label: 'Pending payments', value: pendingPayments },
-        { href: '/admin/moderation', label: 'Sounds to moderate', value: pendingSounds },
-        { href: '/admin/verifications', label: 'Earning apps', value: pendingVerifications },
-        { href: '/admin/withdrawals', label: 'Withdrawals', value: pendingWithdrawals },
+      setSummary(analytics);
+      setQueues([
+        { href: '/admin/payments', label: 'Pending payments', value: pendingPayments, hint: 'Manual Premium proofs' },
+        { href: '/admin/moderation', label: 'Sounds to moderate', value: pendingSounds, hint: 'Creator uploads' },
+        { href: '/admin/verifications', label: 'Verifications', value: pendingVerifications, hint: 'Apply to earn' },
+        { href: '/admin/withdrawals', label: 'Withdrawals', value: pendingWithdrawals, hint: 'Creator payouts' },
         { href: '/admin/reports', label: 'Open reports', value: openReports },
         { href: '/admin/support', label: 'Open support', value: openSupport },
-        { href: '/admin/releases', label: 'App releases', value: appReleases },
+        { href: '/admin/releases', label: 'App releases', value: appReleases, hint: 'APK versions on the download page' },
       ]);
       setLoading(false);
     })();
@@ -53,18 +58,9 @@ export default function AdminOverviewPage() {
 
   if (!isAdmin) return null;
 
-  return (
-    <div className="space-y-6">
-      <p className="text-muted">Operate X-Relax from the website — payments, moderation, APK uploads, and more.</p>
-      {loading ? <p className="text-muted">Loading queues…</p> : null}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {cards.map((card) => (
-          <Link key={card.href} href={card.href} className="card p-5 hover:opacity-90">
-            <p className="text-sm text-muted">{card.label}</p>
-            <p className="text-3xl font-bold mt-2">{card.value}</p>
-          </Link>
-        ))}
-      </div>
-    </div>
-  );
+  if (loading) {
+    return <p className="text-muted">Loading dashboard…</p>;
+  }
+
+  return <AnalyticsDashboard summary={summary} queues={queues} />;
 }

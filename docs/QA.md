@@ -31,11 +31,9 @@ Run on Android emulator or physical device. Use a Free listener, Premium listene
 - [ ] Upload payment proof → pending request
 - [ ] Admin approves → Premium active
 - [ ] Admin rejects / needs more info paths
-- [ ] Premium Pass: 5 test ads → 24h access (1/day)
 - [ ] Downloads appear offline in Library (Premium)
 - [ ] Mix studio: Free limited; Premium can save
-- [ ] Test ad banner only for Free listeners
-- [ ] No ads for Premium / Creator / Admin
+- [ ] No ads or Premium Pass anywhere in the app
 
 ## Creator
 

@@ -35,7 +35,7 @@ function TabBarWithPlayer(props: BottomTabBarProps) {
 }
 
 export function MainTabs() {
-  const { colors, isDark } = useAppTheme();
+  const { colors } = useAppTheme();
 
   return (
     <Tab.Navigator
@@ -43,7 +43,7 @@ export function MainTabs() {
       screenOptions={({ route }) => ({
         headerShown: false,
         tabBarStyle: {
-          backgroundColor: isDark ? '#0A0A0A' : colors.background,
+          backgroundColor: colors.background,
           borderTopColor: colors.border,
           borderTopWidth: StyleSheet.hairlineWidth,
           height: 64,
@@ -55,7 +55,7 @@ export function MainTabs() {
           fontSize: 10,
           marginTop: 2,
         },
-        tabBarActiveTintColor: colors.text,
+        tabBarActiveTintColor: colors.accent,
         tabBarInactiveTintColor: colors.textMuted,
         tabBarIcon: ({ focused, color, size }) => {
           const icons = TAB_ICONS[route.name as keyof MainTabParamList];

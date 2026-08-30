@@ -8,7 +8,7 @@ import type { RootStackParamList } from '../../navigation/types';
 type Props = NativeStackScreenProps<RootStackParamList, 'Legal'>;
 
 const PRIVACY = `Privacy Policy
-Last updated: 2026-08-08
+Last updated: 2026-08-30
 
 X-Relax (“we”, “us”) respects your privacy. This policy explains what we collect and how we use it.
 
@@ -16,7 +16,8 @@ X-Relax (“we”, “us”) respects your privacy. This policy explains what we
 • Account: email, password (hashed by our auth provider), display name, role, and country
 • Profile: optional bio, avatar, banner, and creator verification documents
 • Usage: play history, favourites/likes, playlists, ratings, follows, mix preferences, and Sleep Time settings stored on your device
-• Payments: manual payment requests, proof images, subscription or pass status
+• First-party analytics: anonymous session id, page path, and app-open or APK-download events so we can see website traffic and app installs. We do not use advertising networks.
+• Payments: manual payment requests, proof images, and subscription status
 • Device: push tokens for notifications; basic diagnostics when enabled
 
 2. How we use data
@@ -29,7 +30,6 @@ X-Relax (“we”, “us”) respects your privacy. This policy explains what we
 3. Sharing
 • We do not sell personal data
 • Service providers (for example Supabase hosting and Firebase Cloud Messaging) process data to run the app
-• Test or production ad units on free accounts may use device advertising IDs where enabled
 
 4. Retention & your choices
 • Account data is retained while your account is active
@@ -40,7 +40,7 @@ X-Relax (“we”, “us”) respects your privacy. This policy explains what we
 Privacy questions: support@x-relax.app`;
 
 const TERMS = `Terms of Use
-Last updated: 2026-08-08
+Last updated: 2026-08-30
 
 Welcome to X-Relax. By creating an account or using the app or website, you agree to these terms.
 

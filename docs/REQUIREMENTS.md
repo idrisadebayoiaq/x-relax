@@ -38,7 +38,6 @@ Use this list before and during each phase. Items marked **Done** are already av
 |------|--------|-------|
 | Plan prices (USD + NGN) | You | Monthly / Quarterly / Yearly / Lifetime |
 | Payment instruction copy | Derived | From PAYMENT_DETAILS.md — shown in-app |
-| AdMob app + ad unit IDs | Later | Use Google **test** ad unit IDs until store-ready |
 | Firebase project (FCM) | You | Android package: **`com.xrelax.app`** — see [FIREBASE.md](./FIREBASE.md) |
 
 ## Required for Phase 4 (Creator)
@@ -72,7 +71,6 @@ Use this list before and during each phase. Items marked **Done** are already av
 - Play Store listing / release
 - App Store listing / release
 - Automated payment gateways (Stripe / Paystack / Flutterwave)
-- Production AdMob (use test ads)
 - iOS build (Android first)
 
 ## Decisions to confirm early

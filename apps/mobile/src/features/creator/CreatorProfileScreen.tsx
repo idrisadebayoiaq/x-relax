@@ -218,7 +218,7 @@ export function CreatorProfileScreen() {
   const displayName = profile.display_name?.trim() || 'Creator';
   const initial = displayName[0]?.toUpperCase() ?? 'C';
   const [gradA, gradB] = moodPaletteFor(creatorId);
-  const cardBg = isDark ? '#141414' : colors.surface;
+  const cardBg = colors.elevated;
 
   return (
     <ScreenScaffold

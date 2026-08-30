@@ -62,7 +62,7 @@ export function ShareAppSheet({ visible, onClose }: Props) {
           style={[
             styles.sheet,
             {
-              backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF',
+              backgroundColor: colors.elevated,
               paddingBottom: insets.bottom + 16,
               borderColor: colors.border,
             },

@@ -121,7 +121,7 @@ export function AppMenu({ visible, onClose }: { visible: boolean; onClose: () =>
             style={[
               styles.sheet,
               {
-                backgroundColor: isDark ? '#0C0C0C' : colors.background,
+                backgroundColor: colors.background,
                 borderColor: colors.border,
                 paddingTop: insets.top + 12,
                 paddingBottom: insets.bottom + 16,

@@ -35,7 +35,7 @@ export function ScreenScaffold({
   contentStyle?: StyleProp<ViewStyle>;
   refreshControl?: ReactElement<RefreshControlProps>;
 }) {
-  const { colors, isDark } = useAppTheme();
+  const { colors } = useAppTheme();
   const insets = useSafeAreaInsets();
   const body = (
     <>
@@ -63,9 +63,7 @@ export function ScreenScaffold({
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       <LinearGradient
-        colors={
-          isDark ? ['#121212', '#000000', '#000000'] : ['#F3F0EA', '#FFFFFF', '#FFFFFF']
-        }
+        colors={[colors.gradientTop, colors.background, colors.background]}
         locations={[0, 0.3, 1]}
         style={StyleSheet.absoluteFill}
       />
@@ -108,13 +106,13 @@ export function PrimaryButton({
       disabled={disabled || loading}
       style={[
         styles.primaryBtn,
-        { backgroundColor: colors.inverse, opacity: disabled || loading ? 0.55 : 1 },
+        { backgroundColor: colors.accent, opacity: disabled || loading ? 0.55 : 1 },
       ]}
     >
       {loading ? (
-        <ActivityIndicator color={colors.inverseText} />
+        <ActivityIndicator color={colors.onAccent} />
       ) : (
-        <Text style={[styles.primaryBtnText, { color: colors.inverseText }]}>{label}</Text>
+        <Text style={[styles.primaryBtnText, { color: colors.onAccent }]}>{label}</Text>
       )}
     </Pressable>
   );

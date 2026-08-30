@@ -36,12 +36,12 @@ export function formatRatingSummary(
 }
 
 const MOOD_PALETTES: [string, string][] = [
-  ['#0B1C1D', '#2F5D5E'],
-  ['#14110F', '#8A6A45'],
-  ['#0E1620', '#3A4F63'],
-  ['#161412', '#6B5E4E'],
-  ['#0C1814', '#3F6B5A'],
-  ['#1A1410', '#7A5840'],
+  ['#061428', '#F5C400'],
+  ['#0B3D91', '#FFD54A'],
+  ['#0A1B36', '#C9A227'],
+  ['#061C3A', '#F5C400'],
+  ['#0C1E3D', '#FFE082'],
+  ['#0B2748', '#FFD54A'],
 ];
 
 export function moodPaletteFor(seed: string): [string, string] {

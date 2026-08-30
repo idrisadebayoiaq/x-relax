@@ -432,7 +432,7 @@ export function PlayerScreen({ navigation }: Props) {
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       <LinearGradient
-        colors={isDark ? ['#000000', '#0A0A0A', '#000'] : [g1, '#F3F0EA', '#FFF']}
+        colors={isDark ? [colors.background, colors.gradientTop, colors.background] : [g1, colors.gradientTop, colors.background]}
         locations={[0, 0.42, 1]}
         style={StyleSheet.absoluteFill}
       />
@@ -667,11 +667,11 @@ export function PlayerScreen({ navigation }: Props) {
               styles.upgradeBanner,
               {
                 borderColor: colors.border,
-                backgroundColor: isDark ? 'rgba(201,162,39,0.12)' : 'rgba(201,162,39,0.14)',
+                backgroundColor: colors.accentSoft,
               },
             ]}
           >
-            <Ionicons name="diamond-outline" size={18} color="#C9A227" />
+            <Ionicons name="diamond-outline" size={18} color={colors.accent} />
             <Text style={[styles.upgradeText, { color: colors.text }]}>
               Upgrade to Premium for unlimited listening, loop, downloads, and Sleep Time
             </Text>
@@ -773,7 +773,7 @@ export function PlayerScreen({ navigation }: Props) {
                 {
                   color: colors.text,
                   borderColor: colors.border,
-                  backgroundColor: isDark ? '#0A0A0A' : colors.background,
+                  backgroundColor: colors.background,
                 },
               ]}
             />

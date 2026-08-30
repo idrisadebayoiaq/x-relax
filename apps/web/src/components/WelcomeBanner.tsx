@@ -59,7 +59,7 @@ export function WelcomeBanner() {
           <p className="text-muted">• Unlimited listening every day</p>
           <p className="text-muted">• Loop, Sleep Time, and sleep timer</p>
           <p className="text-muted">• Offline downloads and Mix Studio</p>
-          <p className="text-muted">• Ad-free calm experience</p>
+          <p className="text-muted">• Premium subscription extras</p>
         </div>
         <div className="flex flex-col gap-2">
           <Link href="/premium" className="btn btn-primary w-full" onClick={() => void dismiss()}>

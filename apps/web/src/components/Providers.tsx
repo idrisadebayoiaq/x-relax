@@ -1,5 +1,6 @@
 'use client';
 
+import { AnalyticsBeacon } from '@/components/AnalyticsBeacon';
 import { OfflineProvider } from '@/components/OfflineProvider';
 import { ServiceWorkerRegister } from '@/components/ServiceWorkerRegister';
 import { AuthProvider } from '@/lib/auth-context';
@@ -15,6 +16,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
           <OfflineProvider>
             <PlayerProvider>
               <ServiceWorkerRegister />
+              <AnalyticsBeacon />
               {children}
             </PlayerProvider>
           </OfflineProvider>

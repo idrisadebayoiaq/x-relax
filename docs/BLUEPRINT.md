@@ -9,7 +9,7 @@
 | Future | iOS, web admin dashboard |
 | Backend | Supabase (Auth, Postgres, Storage, Realtime, Edge Functions, RLS) |
 | Notifications | Firebase Cloud Messaging (in-app + push later) |
-| Ads | Google AdMob — Free Listener accounts only (test IDs until store-ready) |
+| Ads | None — no AdMob or in-app ads |
 | Brand icon | Official circular X mark (`assets/brand/`) — app, splash, push, in-app |
 | Theme | Black & white only · light mode + dark mode — see [BRANDING.md](./BRANDING.md) |
 
@@ -42,17 +42,15 @@ Removed from product. All users sign up as Listener or Creator.
 
 ### Free Listener
 
-**Can:** listen, favourite, rate, review, mix (limited), playlists, watch rewarded ads, earn Premium Pass  
-**Ads:** YES
+**Can:** listen, favourite, rate, review, mix (limited), playlists
 
 ### Premium Listener
 
-Everything Free has, plus: no ads, downloads, premium collections, unlimited mixing, higher quality audio
+Everything Free has, plus: downloads, premium collections, unlimited mixing, higher quality audio
 
 ### Creator
 
-Upload/edit sounds, analytics, earnings, withdrawals, creator profile  
-**Ads:** NO
+Upload/edit sounds, analytics, earnings, withdrawals, creator profile
 
 ### Admin
 
@@ -113,10 +111,6 @@ Premium only — offline playback
 
 10 / 20 / 30 / 45 min · 1h · 2h · Custom
 
-## Premium Pass
-
-Free users watch 5 rewarded ads → 24-hour Premium Pass · max one pass per day
-
 ## Ratings
 
 1–5 stars + optional review · artists see averages
@@ -173,11 +167,9 @@ Copyright, audio quality, category, metadata, safety
 
 ## Revenue model
 
-- Premium subscriptions
-- AdMob (Free listeners only)
+- Premium subscriptions only
 
-No ads for Premium, Creators, Admins.  
-Creators earn only from the Premium subscription pool.
+Creators earn only from the Premium subscription pool. No ads.
 
 ## Recommendation engine (no AI)
 

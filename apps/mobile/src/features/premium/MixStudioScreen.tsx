@@ -306,7 +306,7 @@ export function MixStudioScreen({ navigation, route }: Props) {
                 key={layer.sound.id}
                 style={[
                   styles.layerCard,
-                  { backgroundColor: isDark ? '#141414' : colors.surface, borderColor: colors.border },
+                  { backgroundColor: colors.elevated, borderColor: colors.border },
                 ]}
               >
                 <CoverArt title={layer.sound.title} uri={layer.sound.cover_url} size={52} rounded={10} />
@@ -426,7 +426,7 @@ export function MixStudioScreen({ navigation, route }: Props) {
                   key={sound.id}
                   style={[
                     styles.addRow,
-                    { borderColor: colors.border, backgroundColor: isDark ? '#101010' : colors.surface },
+                    { borderColor: colors.border, backgroundColor: colors.elevated },
                   ]}
                 >
                   <CoverArt title={sound.title} uri={sound.cover_url} size={48} rounded={10} />

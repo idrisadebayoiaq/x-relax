@@ -9,7 +9,7 @@ import {
   FileWarning,
   Flag,
   Headphones,
-  LayoutDashboard,
+  BarChart3,
   LifeBuoy,
   Megaphone,
   Settings,
@@ -21,7 +21,7 @@ import {
 import { useAuth } from '@/lib/auth-context';
 
 const NAV = [
-  { href: '/admin', label: 'Overview', icon: LayoutDashboard },
+  { href: '/admin', label: 'Dashboard', icon: BarChart3 },
   { href: '/admin/payments', label: 'Payments', icon: Banknote },
   { href: '/admin/moderation', label: 'Moderation', icon: FileWarning },
   { href: '/admin/verifications', label: 'Verifications', icon: BadgeCheck },
@@ -64,10 +64,10 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     <div className="max-w-6xl mx-auto">
       <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-xs uppercase tracking-wider text-muted">Admin dashboard</p>
-          <h1 className="text-2xl font-serif font-bold">Operations</h1>
+          <p className="text-xs uppercase tracking-wider text-muted">Admin</p>
+          <h1 className="text-2xl font-serif font-bold">Dashboard</h1>
           <p className="text-sm text-muted mt-1">
-            Role: {adminProfile?.role ?? 'admin'} · only visible to admins
+            Role: {adminProfile?.role ?? 'admin'} · website visits and app downloads
           </p>
         </div>
         <Link href="/" className="chip inline-flex items-center gap-1.5">

@@ -192,7 +192,7 @@ function SoundRow({
       <Ionicons
         name={selected ? 'checkmark-circle' : 'ellipse-outline'}
         size={22}
-        color={selected ? '#8A6A45' : colors.textMuted}
+        color={selected ? colors.accent : colors.textMuted}
       />
     </Pressable>
   );
@@ -467,7 +467,7 @@ export function SleepTimeScreen({ navigation }: Props) {
           <Switch
             value={schedule.enabled}
             onValueChange={handleEnableToggle}
-            trackColor={{ false: colors.border, true: '#8A6A45' }}
+            trackColor={{ false: colors.border, true: colors.accent }}
           />
         </View>
       </View>
@@ -508,7 +508,7 @@ export function SleepTimeScreen({ navigation }: Props) {
             <Switch
               value={schedule.loop}
               onValueChange={(loop) => setSchedule((p) => ({ ...p, loop }))}
-              trackColor={{ false: colors.border, true: '#8A6A45' }}
+              trackColor={{ false: colors.border, true: colors.accent }}
             />
           ) : (
             <Pressable onPress={() => navigation.navigate('Premium')} hitSlop={8}>

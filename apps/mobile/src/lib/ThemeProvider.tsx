@@ -69,7 +69,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     () => resolveColors(preference, systemScheme),
     [preference, systemScheme],
   );
-  const isDark = colors.background === '#000000';
+  const isDark = colors.scheme === 'dark';
 
   const value = useMemo(
     () => ({ preference, colors, isDark, setPreference }),

@@ -170,7 +170,7 @@ export function PlaylistsListScreen() {
   }, [filteredPlaylists, query, sort]);
 
   const separatorColor = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)';
-  const searchBg = isDark ? '#1C1C1E' : '#E8E5DF';
+  const searchBg = colors.surface;
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background, paddingTop: insets.top }]}>
@@ -303,7 +303,7 @@ export function PlaylistsListScreen() {
             style={[
               styles.sheet,
               {
-                backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF',
+                backgroundColor: colors.elevated,
                 paddingBottom: insets.bottom + 16,
               },
             ]}
@@ -343,7 +343,7 @@ export function PlaylistsListScreen() {
             style={[
               styles.createSheet,
               {
-                backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF',
+                backgroundColor: colors.elevated,
                 paddingBottom: insets.bottom + 20,
               },
             ]}
@@ -361,7 +361,7 @@ export function PlaylistsListScreen() {
                 {
                   color: colors.text,
                   borderColor: separatorColor,
-                  backgroundColor: isDark ? '#2C2C2E' : '#F3F0EA',
+                  backgroundColor: colors.surface,
                 },
               ]}
             />

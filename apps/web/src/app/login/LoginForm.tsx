@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 export default function LoginForm() {
   const router = useRouter();
@@ -38,6 +39,7 @@ export default function LoginForm() {
         <button type="submit" className="btn btn-primary w-full" disabled={busy}>
           {busy ? 'Signing in…' : 'Sign in'}
         </button>
+        <ThemeToggle />
         <p className="text-sm text-muted">
           <Link href="/forgot-password" className="underline">Forgot password?</Link>
           {' · '}

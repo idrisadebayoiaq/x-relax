@@ -23,6 +23,7 @@ import { SleepTimeScheduler } from './src/features/premium/SleepTimeScheduler';
 import { useAuth } from './src/features/auth/AuthProvider';
 import { useAppTheme } from './src/lib/useAppTheme';
 import { isSupabaseConfigured } from './src/lib/supabase';
+import { recordAppOpen } from './src/lib/analytics';
 
 SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
@@ -75,6 +76,11 @@ function AppShell() {
   useEffect(() => {
     SplashScreen.hideAsync().catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    if (!session) return;
+    void recordAppOpen();
+  }, [session]);
 
   return (
     <>

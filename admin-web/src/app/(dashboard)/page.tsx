@@ -1,5 +1,6 @@
-import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
+import { AnalyticsDashboard } from '@/components/AnalyticsDashboard';
+import { parseAnalyticsSummary, type QueueStat } from '@/lib/analytics';
 
 async function count(table: string, filter?: { column: string; value: string }) {
   const supabase = await createClient();
@@ -10,7 +11,9 @@ async function count(table: string, filter?: { column: string; value: string }) 
 }
 
 export default async function OverviewPage() {
+  const supabase = await createClient();
   const [
+    analyticsResult,
     pendingPayments,
     pendingSounds,
     pendingVerifications,
@@ -19,6 +22,7 @@ export default async function OverviewPage() {
     openSupport,
     appReleases,
   ] = await Promise.all([
+    supabase.rpc('admin_analytics_summary', { p_days: 30 }),
     count('payment_requests', { column: 'status', value: 'pending' }),
     count('sounds', { column: 'status', value: 'pending' }),
     count('creator_verifications', { column: 'status', value: 'pending' }),
@@ -28,34 +32,16 @@ export default async function OverviewPage() {
     count('app_releases'),
   ]);
 
-  const cards = [
-    { href: '/payments', label: 'Pending payments', value: pendingPayments },
-    { href: '/moderation', label: 'Sounds to moderate', value: pendingSounds },
-    { href: '/verifications', label: 'Verifications', value: pendingVerifications },
-    { href: '/withdrawals', label: 'Withdrawals', value: pendingWithdrawals },
+  const summary = parseAnalyticsSummary(analyticsResult.data, 30);
+  const queues: QueueStat[] = [
+    { href: '/payments', label: 'Pending payments', value: pendingPayments, hint: 'Manual Premium proofs' },
+    { href: '/moderation', label: 'Sounds to moderate', value: pendingSounds, hint: 'Creator uploads' },
+    { href: '/verifications', label: 'Verifications', value: pendingVerifications, hint: 'Apply to earn' },
+    { href: '/withdrawals', label: 'Withdrawals', value: pendingWithdrawals, hint: 'Creator payouts' },
     { href: '/reports', label: 'Open reports', value: openReports },
     { href: '/support', label: 'Open support', value: openSupport },
-    { href: '/releases', label: 'App releases', value: appReleases },
+    { href: '/releases', label: 'App releases', value: appReleases, hint: 'APK versions on the download page' },
   ];
 
-  return (
-    <div>
-      <h1 className="text-3xl font-bold tracking-tight">Overview</h1>
-      <p className="text-muted mt-2 mb-8">
-        Operate X-Relax without touching Supabase Studio for daily work.
-      </p>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {cards.map((card) => (
-          <Link
-            key={card.href}
-            href={card.href}
-            className="border border-border bg-surface rounded-xl p-5 hover:opacity-90"
-          >
-            <div className="text-sm text-muted">{card.label}</div>
-            <div className="text-3xl font-bold mt-2">{card.value}</div>
-          </Link>
-        ))}
-      </div>
-    </div>
-  );
+  return <AnalyticsDashboard summary={summary} queues={queues} />;
 }

@@ -21,7 +21,7 @@ export function ActionButton({
       disabled={pending}
       className={
         primary
-          ? 'rounded-lg bg-foreground text-background px-3 py-1.5 text-sm font-semibold disabled:opacity-50'
+          ? 'rounded-lg bg-accent text-on-accent px-3 py-1.5 text-sm font-semibold disabled:opacity-50'
           : 'rounded-lg border border-border px-3 py-1.5 text-sm disabled:opacity-50'
       }
       onClick={() =>

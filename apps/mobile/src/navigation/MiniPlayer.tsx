@@ -26,7 +26,7 @@ function navigateTo<Name extends keyof RootStackParamList>(
 
 /** Mini-player — dismissible; resumes paused position after app reopen. */
 export function MiniPlayer({ bottomOffset = 0, floating = false }: Props) {
-  const { colors, isDark } = useAppTheme();
+  const { colors } = useAppTheme();
   const insets = useSafeAreaInsets();
   const {
     current,
@@ -86,7 +86,7 @@ export function MiniPlayer({ bottomOffset = 0, floating = false }: Props) {
           style={[
             styles.bar,
             {
-              backgroundColor: isDark ? '#161616' : '#F4F4F4',
+              backgroundColor: colors.elevated,
               borderColor: colors.border,
             },
           ]}
@@ -147,7 +147,7 @@ export function MiniPlayer({ bottomOffset = 0, floating = false }: Props) {
         style={[
           styles.bar,
           {
-            backgroundColor: isDark ? '#161616' : '#F4F4F4',
+            backgroundColor: colors.elevated,
             borderColor: colors.border,
           },
         ]}

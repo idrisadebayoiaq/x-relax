@@ -70,11 +70,9 @@ Tick items as you complete them. Do not start the next phase until the current *
 - [x] Admin approve / reject / need more info
 - [x] `admin_review_payment` RPC + `approve-payment` Edge Function
 - [x] `expire-subscriptions` Edge Function
-- [x] Premium Pass (5 test rewarded ads, 1/day, 24h)
 - [x] Downloads + offline list in Library
 - [x] Sound mixing (Free limited, Premium save)
-- [x] Test ad banner for Free listeners only
-- [x] No ads for Premium / Creator / Admin
+- [x] Ads and Premium Pass removed (2026-08-30)
 
 **Exit gate:** [ ] Manual Premium unlock verified end-to-end on device
 
@@ -125,7 +123,7 @@ Tick items as you complete them. Do not start the next phase until the current *
 - [x] Product decisions locked in `app_settings.feature_flags` / `creator_settings`
 - [x] Launch catalog published (10 demo tracks + featured + Daily Pick) — **swap for licensed masters when ready**
 - [ ] Licensed / final sound library replaces demo URLs
-- [ ] Full QA pass on device (auth, player, premium, creator, ads rules, RLS) — see [QA.md](./QA.md)
+- [ ] Full QA pass on device (auth, player, premium, creator, RLS) — see [QA.md](./QA.md)
 - [ ] Push verified on physical device (preview/dev APK — not Expo Go)
 - [ ] Internal APK distributed to testers
 - [ ] Feedback collected and prioritized
@@ -142,7 +140,6 @@ Tick items as you complete them. Do not start the next phase until the current *
 - [ ] Apple Sign-In
 - [ ] Play Store release
 - [ ] App Store release
-- [ ] Production AdMob IDs
 - [ ] Automated payment gateway
 - [ ] iOS production build
 - [ ] Full lock-screen media controls

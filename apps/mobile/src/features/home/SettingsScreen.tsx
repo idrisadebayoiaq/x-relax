@@ -25,8 +25,6 @@ import type { RootStackParamList } from '../../navigation/types';
 import type { ThemePreference } from '../../lib/theme';
 import type { AudioQuality, DownloadNetworkMode } from '../../lib/appSettings';
 
-const GOLD = '#C9A227';
-
 export function SettingsScreen() {
   const { colors, isDark } = useAppTheme();
   const { preference, setPreference } = useTheme();
@@ -43,7 +41,7 @@ export function SettingsScreen() {
     Constants.nativeAppVersion ??
     '1.0.0';
 
-  const cardBg = isDark ? '#141414' : colors.surface;
+  const cardBg = colors.elevated;
 
   const onDeleteAccount = useCallback(() => {
     Alert.alert(
@@ -86,7 +84,7 @@ export function SettingsScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       <LinearGradient
-        colors={isDark ? ['#121212', '#000'] : ['#F3F0EA', '#FFF']}
+        colors={[colors.gradientTop, colors.background]}
         style={StyleSheet.absoluteFill}
       />
       <ScrollView
@@ -136,9 +134,9 @@ export function SettingsScreen() {
               maximumValue={1}
               value={settings.volume}
               onSlidingComplete={(v) => void setVolume(v)}
-              minimumTrackTintColor={GOLD}
+              minimumTrackTintColor={colors.accent}
               maximumTrackTintColor={colors.border}
-              thumbTintColor={GOLD}
+              thumbTintColor={colors.accent}
             />
             <Ionicons name="volume-high" size={18} color={colors.textMuted} />
           </View>
@@ -313,14 +311,14 @@ function SettingRow({
   label: string;
   selected: boolean;
   onPress: () => void;
-  colors: { text: string; border: string };
+  colors: { text: string; border: string; accent: string };
   showDivider?: boolean;
 }) {
   return (
     <>
       <Pressable onPress={onPress} style={styles.settingRow}>
         <Text style={[styles.rowLabel, { color: colors.text }]}>{label}</Text>
-        {selected ? <Ionicons name="checkmark-circle" size={20} color={GOLD} /> : null}
+        {selected ? <Ionicons name="checkmark-circle" size={20} color={colors.accent} /> : null}
       </Pressable>
       {showDivider ? <View style={[styles.divider, { backgroundColor: colors.border }]} /> : null}
     </>

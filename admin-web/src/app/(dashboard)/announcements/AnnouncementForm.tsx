@@ -107,7 +107,7 @@ export function AnnouncementForm() {
       <button
         type="submit"
         disabled={pending}
-        className="rounded-lg bg-foreground text-background px-4 py-2 text-sm font-semibold disabled:opacity-50"
+        className="rounded-lg bg-accent text-on-accent px-4 py-2 text-sm font-semibold disabled:opacity-50"
       >
         {pending ? 'Sending…' : 'Send announcement'}
       </button>

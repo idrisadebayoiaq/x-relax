@@ -91,7 +91,7 @@ export function SearchScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       <LinearGradient
-        colors={isDark ? ['#121212', '#000'] : ['#F3F0EA', '#FFF']}
+        colors={[colors.gradientTop, colors.background]}
         style={StyleSheet.absoluteFill}
       />
       <View style={{ paddingTop: insets.top + 12, paddingHorizontal: 20 }}>

@@ -64,7 +64,7 @@ export function SupportReply({ threadId }: { threadId: string }) {
           onChange={(e) => setBody(e.target.value)}
           placeholder="Reply…"
         />
-        <button className="rounded-lg bg-foreground text-background px-4 py-2 font-semibold">
+        <button className="rounded-lg bg-accent text-on-accent px-4 py-2 font-semibold">
           Send
         </button>
       </form>

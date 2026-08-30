@@ -27,6 +27,7 @@ import {
 import { useAuth } from '@/lib/auth-context';
 import { PlayerBar } from '@/components/PlayerBar';
 import { SleepTimeWatcher } from '@/components/SleepTimeWatcher';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 type NavItem = {
   href: string;
@@ -109,7 +110,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 key={item.href}
                 href={item.href}
                 className={`rounded-xl px-3 py-2.5 text-sm flex items-center gap-3 ${
-                  active ? 'bg-foreground text-background' : 'hover:bg-background'
+                  active ? 'bg-accent text-on-accent' : 'hover:bg-background text-foreground'
                 }`}
               >
                 <Icon className="h-4.5 w-4.5 shrink-0" size={18} strokeWidth={active ? 2.25 : 1.75} />
@@ -132,7 +133,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     key={item.href}
                     href={item.href}
                     className={`rounded-xl px-3 py-2.5 text-sm flex items-center gap-3 ${
-                      active ? 'bg-foreground text-background' : 'hover:bg-background'
+                      active ? 'bg-accent text-on-accent' : 'hover:bg-background text-foreground'
                     }`}
                   >
                     <Icon className="shrink-0" size={18} strokeWidth={active ? 2.25 : 1.75} />
@@ -160,8 +161,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 href="/admin"
                 className={`rounded-xl px-3 py-2.5 text-sm flex items-center gap-3 ${
                   pathname.startsWith('/admin')
-                    ? 'bg-foreground text-background'
-                    : 'hover:bg-background'
+                    ? 'bg-accent text-on-accent'
+                    : 'hover:bg-background text-foreground'
                 }`}
               >
                 <Shield size={18} strokeWidth={1.75} className="shrink-0" />
@@ -170,7 +171,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </>
           ) : null}
 
-          <div className="pt-4 mt-4 border-t border-border space-y-0.5">
+          <div className="pt-4 mt-4 border-t border-border space-y-2">
+            <p className="text-[11px] uppercase tracking-wider text-muted px-2">Appearance</p>
+            <ThemeToggle />
+          <div className="space-y-0.5">
             <Link
               href="/download"
               className="rounded-xl px-3 py-2.5 text-sm flex items-center gap-3 hover:bg-background"
@@ -201,12 +205,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               Sign out
             </button>
           </div>
+          </div>
         </nav>
       </aside>
 
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
-        <header className="lg:hidden border-b border-border px-4 py-3 flex items-center justify-between sticky top-0 bg-background z-20 gap-3 shrink-0">
-          <p className="font-serif font-bold text-xl shrink-0">X-Relax</p>
+        <header className="lg:hidden border-b border-border px-4 py-3 sticky top-0 bg-background z-20 shrink-0 space-y-2">
+          <div className="flex items-center justify-between gap-3">
+            <p className="font-serif font-bold text-xl shrink-0 text-foreground">X-Relax</p>
+            <div className="w-40 shrink-0">
+              <ThemeToggle />
+            </div>
+          </div>
           <nav className="flex gap-1 overflow-x-auto rail-scroll text-sm">
             {MAIN_NAV.map((item) => {
               const Icon = item.icon;
@@ -216,7 +226,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   key={item.href}
                   href={item.href}
                   className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg whitespace-nowrap ${
-                    active ? 'font-semibold bg-surface' : 'text-muted'
+                    active ? 'font-semibold bg-accent text-on-accent' : 'text-muted'
                   }`}
                 >
                   <Icon size={15} strokeWidth={active ? 2.25 : 1.75} />
@@ -228,7 +238,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <Link
                 href="/admin"
                 className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg whitespace-nowrap ${
-                  pathname.startsWith('/admin') ? 'font-semibold bg-surface' : 'text-muted'
+                  pathname.startsWith('/admin') ? 'font-semibold bg-accent text-on-accent' : 'text-muted'
                 }`}
               >
                 <Shield size={15} />

@@ -12,7 +12,7 @@ export function useAppTheme(_preference?: ThemePreference): {
   const systemScheme = useColorScheme();
   if (ctx) return { colors: ctx.colors, isDark: ctx.isDark };
   const colors = resolveColors(_preference ?? 'system', systemScheme);
-  return { colors, isDark: colors.background === '#000000' };
+  return { colors, isDark: colors.scheme === 'dark' };
 }
 
 export type { ThemeColors, ThemePreference };
