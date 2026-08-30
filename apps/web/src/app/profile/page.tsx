@@ -407,7 +407,9 @@ export default function ProfilePage() {
         type="button"
         className="w-full rounded-xl border border-red-500 text-red-500 py-3.5 font-semibold inline-flex items-center justify-center gap-2"
         onClick={() => {
-          if (await appConfirm('Sign out of X-Relax?')) void signOut();
+          void (async () => {
+            if (await appConfirm('Sign out of X-Relax?')) void signOut();
+          })();
         }}
       >
         <LogOut size={18} />

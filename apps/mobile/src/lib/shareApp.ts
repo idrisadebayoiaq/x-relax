@@ -8,7 +8,7 @@ import { supabase } from './supabase';
 import { appAlert } from '../ui/appAlert';
 
 const FALLBACK_APK =
-  'https://expo.dev/artifacts/eas/9ENeBOe_0pO-aHptRC6eQcr5ltQKHmyFN6XMuUHLsUA.apk';
+  'https://expo.dev/artifacts/eas/m9xWgZJpB5pbucbFQGV6bm-nE0-YU9ulMSvnzez_rzc.apk';
 
 export async function fetchAppDownloadUrl(): Promise<string> {
   const { data } = await supabase
